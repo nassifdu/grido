@@ -1,0 +1,60 @@
+import { StockRow } from "./types";
+
+export const mockStock: StockRow[] = [
+  {
+    id: "1",
+    referencia: "BLS-001",
+    descricao: "Blusa Linho Feminina",
+    cor: "Branco",
+    categoria: "Blusas",
+    estoque: { PP: 4, P: 12, M: 18, G: 10, GG: 5, XGG: 1 },
+  },
+  {
+    id: "2",
+    referencia: "BLS-001",
+    descricao: "Blusa Linho Feminina",
+    cor: "Areia",
+    categoria: "Blusas",
+    estoque: { PP: 2, P: 8, M: 14, G: 9, GG: 3, XGG: 0 },
+  },
+  {
+    id: "3",
+    referencia: "CAL-042",
+    descricao: "Calça Wide Leg",
+    cor: "Preto",
+    categoria: "Calças",
+    estoque: { PP: 0, P: 6, M: 20, G: 15, GG: 7, XGG: 2 },
+  },
+  {
+    id: "4",
+    referencia: "CAL-042",
+    descricao: "Calça Wide Leg",
+    cor: "Caramelo",
+    categoria: "Calças",
+    estoque: { PP: 1, P: 5, M: 11, G: 8, GG: 4, XGG: 0 },
+  },
+  {
+    id: "5",
+    referencia: "VES-017",
+    descricao: "Vestido Midi Floral",
+    cor: "Rosa",
+    categoria: "Vestidos",
+    estoque: { PP: 3, P: 9, M: 16, G: 6, GG: 2, XGG: 0 },
+  },
+  {
+    id: "6",
+    referencia: "VES-017",
+    descricao: "Vestido Midi Floral",
+    cor: "Verde",
+    categoria: "Vestidos",
+    estoque: { PP: 5, P: 11, M: 13, G: 7, GG: 3, XGG: 1 },
+  },
+  {
+    id: "7",
+    referencia: "JAQ-008",
+    descricao: "Jaqueta Jeans Oversized",
+    cor: "Azul",
+    categoria: "Jaquetas",
+    estoque: { PP: 2, P: 7, M: 10, G: 8, GG: 5, XGG: 2 },
+  },
+];
