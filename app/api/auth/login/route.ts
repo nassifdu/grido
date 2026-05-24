@@ -1,3 +1,4 @@
+import { randomBytes, createHash } from "crypto";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -11,26 +12,41 @@ export async function GET() {
     );
   }
 
-  const state = crypto.randomUUID();
+  // PKCE: generate verifier and SHA-256 challenge
+  const verifier = randomBytes(32).toString("base64url");
+  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const state = randomBytes(16).toString("hex");
 
+  // Scopes are registered in the Bling developer panel — verify them there before deploying.
+  // Common scopes: produtos, estoques, pedidos, contatos, notasfiscais, etc.
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
     state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   });
 
-  const response = NextResponse.redirect(
+  const res = NextResponse.redirect(
     `https://www.bling.com.br/Api/v3/oauth/authorize?${params}`
   );
 
-  response.cookies.set("bling_oauth_state", state, {
+  res.cookies.set("pkce_verifier", verifier, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 10, // 10 minutes
+    maxAge: 60 * 10,
     path: "/",
   });
 
-  return response;
+  res.cookies.set("oauth_state", state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 10,
+    path: "/",
+  });
+
+  return res;
 }

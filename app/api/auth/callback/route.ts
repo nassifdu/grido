@@ -1,39 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
+import { saveBlingTokens } from "@/lib/bling";
+import { createSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
+  const base = new URL("/", request.url);
 
-  const error = searchParams.get("error");
-  if (error) {
-    const description = searchParams.get("error_description") ?? error;
-    return NextResponse.json({ error: description }, { status: 400 });
+  const oauthError = searchParams.get("error");
+  if (oauthError) {
+    const desc = searchParams.get("error_description") ?? oauthError;
+    console.error("[callback] OAuth error:", desc);
+    return NextResponse.redirect(new URL("/?error=oauth", base));
   }
 
   const code = searchParams.get("code");
-  const state = searchParams.get("state");
-
   if (!code) {
-    return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    return NextResponse.redirect(new URL("/?error=missing_code", base));
   }
 
-  const storedState = request.cookies.get("bling_oauth_state")?.value;
+  const state = searchParams.get("state");
+  const storedState = request.cookies.get("oauth_state")?.value;
   if (!state || !storedState || state !== storedState) {
-    return NextResponse.json({ error: "Invalid state" }, { status: 400 });
+    return NextResponse.redirect(new URL("/?error=invalid_state", base));
   }
 
-  const clientId = process.env.BLING_CLIENT_ID;
-  const clientSecret = process.env.BLING_CLIENT_SECRET;
-  const redirectUri = process.env.BLING_REDIRECT_URI;
-
-  if (!clientId || !clientSecret || !redirectUri) {
-    return NextResponse.json(
-      { error: "Missing Bling environment variables" },
-      { status: 500 }
-    );
+  const verifier = request.cookies.get("pkce_verifier")?.value;
+  if (!verifier) {
+    return NextResponse.redirect(new URL("/?error=missing_verifier", base));
   }
 
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const { BLING_CLIENT_ID, BLING_CLIENT_SECRET, BLING_REDIRECT_URI } = process.env;
+  if (!BLING_CLIENT_ID || !BLING_CLIENT_SECRET || !BLING_REDIRECT_URI) {
+    return NextResponse.json({ error: "Missing Bling env vars" }, { status: 500 });
+  }
 
+  const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64");
+
+  // Exchange code for tokens
   const tokenRes = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
     method: "POST",
     headers: {
@@ -43,39 +46,43 @@ export async function GET(request: NextRequest) {
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: BLING_REDIRECT_URI,
+      code_verifier: verifier,
     }),
   });
 
   if (!tokenRes.ok) {
-    const text = await tokenRes.text();
-    return NextResponse.json(
-      { error: "Token exchange failed", detail: text },
-      { status: tokenRes.status }
-    );
+    const body = await tokenRes.text();
+    console.error("[callback] token exchange failed:", tokenRes.status, body);
+    return NextResponse.redirect(new URL("/?error=token_exchange", base));
   }
 
-  const { access_token, refresh_token, expires_in } = await tokenRes.json();
+  const tokenJson = await tokenRes.json();
+  const { access_token, refresh_token, expires_in, scope } = tokenJson;
 
-  const response = NextResponse.redirect(new URL("/", request.url));
+  // Bling encodes the authorized account IDs as space-separated values in `scope`.
+  // The first value is the primary account ID — used as the stable user identifier.
+  const blingUserId = String(scope ?? "").split(" ")[0];
 
-  response.cookies.delete("bling_oauth_state");
+  if (!blingUserId) {
+    console.error("[callback] could not extract user ID from token scope", tokenJson);
+    return NextResponse.redirect(new URL("/?error=no_user_id", base));
+  }
 
-  response.cookies.set("bling_access_token", access_token, {
+  await saveBlingTokens(blingUserId, access_token, refresh_token, expires_in ?? 3600);
+
+  const sessionToken = await createSession(blingUserId);
+  const res = NextResponse.redirect(new URL("/dashboard", request.url));
+
+  res.cookies.delete("pkce_verifier");
+  res.cookies.delete("oauth_state");
+  res.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: expires_in ?? 3600,
+    maxAge: SESSION_MAX_AGE,
     path: "/",
   });
 
-  response.cookies.set("bling_refresh_token", refresh_token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    path: "/",
-  });
-
-  return response;
+  return res;
 }
