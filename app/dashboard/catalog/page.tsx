@@ -1,4 +1,5 @@
 import CatalogView from "@/app/components/catalog/CatalogView";
+import SyncButton from "@/app/components/catalog/SyncButton";
 
 export const metadata = { title: "Catálogo · Grido" };
 
@@ -21,14 +22,17 @@ export default function CatalogPage() {
               </span>
             </nav>
           </div>
-          <form action="/api/auth/logout" method="POST">
-            <button
-              type="submit"
-              className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
-            >
-              Sair
-            </button>
-          </form>
+          <div className="flex items-center gap-3">
+            <SyncButton />
+            <form action="/api/auth/logout" method="POST">
+              <button
+                type="submit"
+                className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
+              >
+                Sair
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

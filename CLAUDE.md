@@ -12,6 +12,16 @@ npm run start    # serve production build
 
 There is no test runner or lint script configured.
 
+## Seed local data into Supabase
+
+After running the SQL migration, upload the existing local JSON snapshot:
+
+```bash
+npx tsx scripts/seed-catalog.ts
+```
+
+This reads `data/produtos.json` and `data/variacoes.json` and upserts them into `bling_produtos` / `bling_variacoes`. The tables must exist first (run `supabase/migrations/002_catalog_cache.sql`).
+
 ## Environment Variables
 
 Required in `.env.local`:
@@ -24,7 +34,7 @@ Required in `.env.local`:
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) |
 | `SESSION_SECRET` | Secret for HMAC-signed session JWTs |
-| `ENCRYPTION_KEY` | Key used by `lib/crypto.ts` to encrypt tokens at rest |
+| `TOKEN_ENCRYPTION_KEY` | 64-char hex key used by `lib/crypto.ts` to AES-encrypt tokens at rest |
 
 ## Architecture
 
@@ -43,11 +53,13 @@ Required in `.env.local`:
 
 ### Product data pipeline
 
-Bling product data is stored as JSON files in `data/`:
-- `data/produtos.json` — full product list (parents + children)
-- `data/variacoes.json` — variations keyed by parent ID (richer source)
+Bling product data is stored in two Supabase tables:
+- `bling_produtos` — one row per product (`id bigint`, `data jsonb`)
+- `bling_variacoes` — one row per variation (`id bigint`, `id_produto_pai bigint`, `data jsonb`)
 
-`lib/transform.ts` (`buildTransformed`) merges both files into a flat `TransformedItem[]`. Results are mtime-cached in memory so repeated requests don't re-parse. The normalization logic in `fixVariacaoNome` converts messy Bling variation strings into `Cor:X;Tamanho:Y` format.
+`lib/transform.ts` (`buildTransformed`) paginates both tables from Supabase (1 000 rows per page) and merges them into a flat `TransformedItem[]`. Results are cached in memory with a 30-second TTL. The normalization logic in `fixVariacaoNome` converts messy Bling variation strings into `Cor:X;Tamanho:Y` format.
+
+The catalog sync (`/api/catalog/sync`, POST) streams SSE progress events while it fetches from Bling and writes to Supabase. The variations phase is sequential with a 400 ms delay between requests (~10 min for ~970 parents). The `SyncButton` component reads the stream and renders a progress bar during the variations phase.
 
 `lib/catalog.ts` builds on top of `buildTransformed` to expose:
 - `searchProducts(query)` → `ProductSummary[]` (for the search dropdown)
@@ -64,7 +76,8 @@ Size ordering: numeric sizes sort numerically; letter sizes follow a hard-coded 
 | `/api/auth/logout` | POST | Clear session cookie |
 | `/api/catalog` | GET | Search products (`?q=&limit=`) |
 | `/api/catalog/[parentId]` | GET | Pivot data for a product group |
-| `/api/bling/sync` | POST | Proxy-sync any Bling resource into Supabase |
+| `/api/catalog/sync` | POST | SSE stream: fetch Bling → upsert Supabase |
+| `/api/bling/sync` | POST | Generic proxy: sync any Bling resource to Supabase |
 
 ### Frontend
 

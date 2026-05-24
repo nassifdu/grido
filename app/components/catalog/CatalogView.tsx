@@ -13,7 +13,6 @@ export default function CatalogView() {
   const [pivots, setPivots] = useState<Map<string, PivotState>>(new Map());
   const [showDrop, setShowDrop] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
   const [activeIdx, setActiveIdx] = useState(-1);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -36,12 +35,10 @@ export default function CatalogView() {
       return;
     }
     setIsSearching(true);
-    setSyncError(null);
     try {
       const res = await fetch(`/api/catalog?q=${encodeURIComponent(q)}&limit=25`);
       const json = await res.json();
       if (!res.ok) {
-        if (res.status === 503) setSyncError(json.error);
         setResults([]);
         setShowDrop(false);
         return;
@@ -137,10 +134,6 @@ export default function CatalogView() {
             </svg>
           )}
         </div>
-
-        {syncError && (
-          <p className="mt-2 text-xs text-amber-600 px-1">{syncError}</p>
-        )}
 
         {/* Dropdown */}
         {showDrop && results.length > 0 && (

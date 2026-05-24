@@ -10,12 +10,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ products });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    if (msg.includes("ENOENT")) {
-      return NextResponse.json(
-        { error: "Data not synced. Fetch /api/products and /api/products/variations first." },
-        { status: 503 }
-      );
-    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

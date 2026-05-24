@@ -1,8 +1,4 @@
-import fs from "fs/promises";
-import path from "path";
-
-const PRODUTOS_PATH = path.join(process.cwd(), "data", "produtos.json");
-const VARIACOES_PATH = path.join(process.cwd(), "data", "variacoes.json");
+import { getSupabase } from "./supabase";
 
 interface RawProduct {
   id: number;
@@ -29,7 +25,7 @@ export interface TransformedItem {
   estoque: number;
 }
 
-// ── variacao_nome normalization (ported from transform.py) ────────────────────
+// ── variacao_nome normalization ────────────────────────────────────────────────
 
 function isCorrectVariacao(s: string): boolean {
   return (
@@ -64,9 +60,6 @@ function normalizeVariacao(vn: string | null | undefined): string | null {
   return fixVariacaoNome(s);
 }
 
-// Fallback: extract "Cor:X;Tamanho:Y" (or single-dimension) appended to a child's nome.
-// produtos.json children store variation labels directly in their nome field when
-// variacoes.json has no entry for their parent.
 function extractVariacaoFromNome(nome: string): string | null {
   const m = nome.match(/\s+((?:(?:Cor|Tamanho):[^;]+)(?:;(?:Cor|Tamanho):[^;]+)*)$/i);
   if (!m) return null;
@@ -79,33 +72,60 @@ function saldo(e: RawProduct["estoque"]): number {
   return e as number;
 }
 
-// ── mtime-based module cache ───────────────────────────────────────────────────
+// ── Supabase pagination helper ─────────────────────────────────────────────────
 
-let _cache: { items: TransformedItem[]; mtime: number } | null = null;
+async function fetchAllRows<T>(table: string, select: string): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let from = 0;
 
-export async function buildTransformed(): Promise<TransformedItem[]> {
-  let varMtime = 0;
-  try {
-    const stat = await fs.stat(VARIACOES_PATH);
-    varMtime = stat.mtimeMs;
-  } catch {
-    // file not yet present
+  while (true) {
+    const { data, error } = await getSupabase()
+      .from(table)
+      .select(select)
+      .range(from, from + PAGE - 1);
+
+    if (error) throw new Error(`Supabase error on ${table}: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    all.push(...(data as T[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
   }
 
-  if (_cache && _cache.mtime === varMtime && varMtime > 0) {
+  return all;
+}
+
+// ── In-memory TTL cache ───────────────────────────────────────────────────────
+
+let _cache: { items: TransformedItem[]; fetchedAt: number } | null = null;
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+export function clearTransformCache() {
+  _cache = null;
+}
+
+export async function buildTransformed(): Promise<TransformedItem[]> {
+  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
     return _cache.items;
   }
 
-  const [rawProdutos, rawVariacoes] = await Promise.all([
-    fs.readFile(PRODUTOS_PATH, "utf-8").then(JSON.parse),
-    fs.readFile(VARIACOES_PATH, "utf-8").then(JSON.parse),
+  const [prodRows, varRows] = await Promise.all([
+    fetchAllRows<{ data: RawProduct }>("bling_produtos", "data"),
+    fetchAllRows<{ id_produto_pai: number; data: RawProduct }>(
+      "bling_variacoes",
+      "id_produto_pai, data"
+    ),
   ]);
 
-  const productsList: RawProduct[] = Array.isArray(rawProdutos)
-    ? rawProdutos
-    : (rawProdutos.products ?? []);
+  const productsList: RawProduct[] = prodRows.map((r) => r.data);
 
-  const variacoes: Record<string, RawProduct[]> = rawVariacoes;
+  const variacoes: Record<string, RawProduct[]> = {};
+  for (const row of varRows) {
+    const pid = String(row.id_produto_pai);
+    if (!variacoes[pid]) variacoes[pid] = [];
+    variacoes[pid].push(row.data);
+  }
 
   const idsWithChildren = new Set<number>(Object.keys(variacoes).map(Number));
   for (const p of productsList) {
@@ -139,7 +159,7 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     seenIds.add(p.id);
   }
 
-  // 2. children from variacoes.json (richer source)
+  // 2. children from bling_variacoes (richer source)
   for (const [parentIdStr, children] of Object.entries(variacoes)) {
     const parentId = parseInt(parentIdStr);
     const parentNome = parentNameMap.get(parentId) ?? "";
@@ -160,7 +180,7 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     }
   }
 
-  // 3. children from produtos.json not covered by variacoes.json
+  // 3. children from bling_produtos not covered by bling_variacoes
   for (const p of productsList) {
     if (p.situacao !== "A") continue;
     if (p.idProdutoPai == null) continue;
@@ -181,6 +201,6 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     seenIds.add(p.id);
   }
 
-  _cache = { items: output, mtime: varMtime };
+  _cache = { items: output, fetchedAt: Date.now() };
   return output;
 }
