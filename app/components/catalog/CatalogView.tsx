@@ -118,16 +118,17 @@ export default function CatalogView() {
           <div className="absolute -top-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
         )}
 
+        {/* draggable wrapper — no overflow so child scrollbars render correctly */}
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, flatIdx)}
           onDragOver={(e) => handleDragOver(e, flatIdx)}
           onDrop={(e) => handleDrop(e, flatIdx)}
           onDragEnd={handleDragEnd}
-          className={`rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
-            isDragging ? "opacity-30" : "opacity-100"
-          }`}
+          className={`transition-opacity duration-150 ${isDragging ? "opacity-30" : "opacity-100"}`}
         >
+        {/* visual card — overflow-hidden clips table bg to rounded corners */}
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           {/* header */}
           <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-4">
             {/* grip handle */}
@@ -182,7 +183,8 @@ export default function CatalogView() {
           ) : (
             <PivotTable pivot={state} />
           )}
-        </div>
+        </div>{/* end visual card */}
+        </div>{/* end draggable wrapper */}
 
         {/* drop indicator: below */}
         {isOver && !dragOver?.before && (
@@ -237,9 +239,8 @@ export default function CatalogView() {
           {!query && (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center select-none">
               <svg className="mb-3 h-8 w-8 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 1 0 6.5 6.5a7.5 7.5 0 0 0 10.65 10.65z"
-                />
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path strokeLinecap="round" d="M16.5 16.5L21 21" />
               </svg>
               <p className="text-xs text-zinc-400">Busque um produto para começar</p>
             </div>
