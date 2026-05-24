@@ -127,8 +127,8 @@ export default function CatalogView() {
           onDragEnd={handleDragEnd}
           className={`transition-opacity duration-150 ${isDragging ? "opacity-30" : "opacity-100"}`}
         >
-        {/* visual card — overflow-hidden clips table bg to rounded corners */}
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        {/* visual card — overflow:clip clips to border-radius without hiding child scrollbars */}
+        <div className="[overflow:clip] rounded-xl border border-zinc-200 bg-white shadow-sm">
           {/* header */}
           <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-4">
             {/* grip handle */}
