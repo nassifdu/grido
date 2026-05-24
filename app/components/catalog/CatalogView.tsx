@@ -118,17 +118,16 @@ export default function CatalogView() {
           <div className="absolute -top-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
         )}
 
-        {/* draggable wrapper — no overflow so child scrollbars render correctly */}
         <div
           draggable
           onDragStart={(e) => handleDragStart(e, flatIdx)}
           onDragOver={(e) => handleDragOver(e, flatIdx)}
           onDrop={(e) => handleDrop(e, flatIdx)}
           onDragEnd={handleDragEnd}
-          className={`transition-opacity duration-150 ${isDragging ? "opacity-30" : "opacity-100"}`}
+          className={`rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
+            isDragging ? "opacity-30" : "opacity-100"
+          }`}
         >
-        {/* visual card — overflow:clip clips to border-radius without hiding child scrollbars */}
-        <div className="[overflow:clip] rounded-xl border border-zinc-200 bg-white shadow-sm">
           {/* header */}
           <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-4">
             {/* grip handle */}
@@ -183,8 +182,7 @@ export default function CatalogView() {
           ) : (
             <PivotTable pivot={state} />
           )}
-        </div>{/* end visual card */}
-        </div>{/* end draggable wrapper */}
+        </div>
 
         {/* drop indicator: below */}
         {isOver && !dragOver?.before && (
