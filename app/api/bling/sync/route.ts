@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { blingFetch } from "@/lib/bling";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 export async function POST(request: NextRequest) {
   const blingUserId = await getSession(request);
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   // Each resource maps to its own Supabase table (created per feature, not here).
   // The table must have an `id` column matching Bling's resource ID for upsert to work.
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from(resource)
     .upsert(items as Record<string, unknown>[], { onConflict: "id" });
 

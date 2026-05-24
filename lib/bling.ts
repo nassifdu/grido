@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 import { encrypt, decrypt } from "./crypto";
 
 const BLING_BASE = "https://www.bling.com.br/Api/v3";
@@ -26,7 +26,7 @@ export async function saveBlingTokens(
   expiresIn: number
 ): Promise<void> {
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-  const { error } = await supabase.from("bling_tokens").upsert(
+  const { error } = await getSupabase().from("bling_tokens").upsert(
     {
       bling_user_id: blingUserId,
       access_token_enc: encrypt(accessToken),
@@ -63,7 +63,7 @@ export async function refreshBlingTokens(blingUserId: string): Promise<string> {
     const body = await res.text();
     console.error(`[bling] refresh failed ${res.status}:`, body);
     // Token expired or revoked — purge from DB so user is forced to re-login
-    await supabase.from("bling_tokens").delete().eq("bling_user_id", blingUserId);
+    await getSupabase().from("bling_tokens").delete().eq("bling_user_id", blingUserId);
     throw Object.assign(new Error("Refresh token expired or revoked"), { status: 401 });
   }
 
