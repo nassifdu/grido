@@ -180,9 +180,7 @@ export default function CatalogView() {
               Erro ao carregar dados
             </div>
           ) : (
-            <div className="overflow-hidden rounded-b-xl">
-              <PivotTable pivot={state} />
-            </div>
+            <PivotTable pivot={state} />
           )}
         </div>
 
