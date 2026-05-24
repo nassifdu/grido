@@ -4,7 +4,7 @@ import { encrypt, decrypt } from "./crypto";
 const BLING_BASE = "https://www.bling.com.br/Api/v3";
 
 export async function getBlingTokens(blingUserId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("bling_tokens")
     .select("access_token_enc, refresh_token_enc, expires_at")
     .eq("bling_user_id", blingUserId)
