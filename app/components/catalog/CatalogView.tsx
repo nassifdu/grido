@@ -13,13 +13,16 @@ export default function CatalogView() {
   const [pivots, setPivots] = useState<Map<string, PivotState>>(new Map());
   const [isSearching, setIsSearching] = useState(false);
 
+  // drag state
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<{ idx: number; before: boolean } | null>(null);
+
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // ── search ──────────────────────────────────────────────────────────────────
+
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
+    if (!q.trim()) { setResults([]); return; }
     setIsSearching(true);
     try {
       const res = await fetch(`/api/catalog?q=${encodeURIComponent(q)}&limit=50`);
@@ -38,19 +41,15 @@ export default function CatalogView() {
     timer.current = setTimeout(() => doSearch(val), 280);
   };
 
+  // ── widget toggle ────────────────────────────────────────────────────────────
+
   const toggleWidget = async (product: ProductSummary) => {
     const selected = widgets.some((w) => w.key === product.key);
-
     if (selected) {
       setWidgets((prev) => prev.filter((w) => w.key !== product.key));
-      setPivots((prev) => {
-        const next = new Map(prev);
-        next.delete(product.key);
-        return next;
-      });
+      setPivots((prev) => { const n = new Map(prev); n.delete(product.key); return n; });
       return;
     }
-
     setWidgets((prev) => [...prev, product]);
     setPivots((prev) => new Map(prev).set(product.key, "loading"));
     try {
@@ -63,11 +62,147 @@ export default function CatalogView() {
     }
   };
 
+  // ── drag & drop ──────────────────────────────────────────────────────────────
+
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    setDragging(idx);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    setDragOver((prev) =>
+      prev?.idx === idx && prev?.before === before ? prev : { idx, before }
+    );
+  };
+
+  const handleDrop = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragging === null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    let insertAt = before ? idx : idx + 1;
+    if (dragging < insertAt) insertAt--;
+    if (insertAt !== dragging) {
+      setWidgets((prev) => {
+        const next = [...prev];
+        const [item] = next.splice(dragging, 1);
+        next.splice(insertAt, 0, item);
+        return next;
+      });
+    }
+    setDragging(null);
+    setDragOver(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragging(null);
+    setDragOver(null);
+  };
+
+  // ── widget card ──────────────────────────────────────────────────────────────
+
+  const renderWidget = (w: ProductSummary, flatIdx: number) => {
+    const state = pivots.get(w.key);
+    const pivot = state && state !== "loading" && state !== "error" ? state : null;
+    const isDragging = dragging === flatIdx;
+    const isOver = dragOver?.idx === flatIdx;
+
+    return (
+      <div key={w.key} className="relative select-none">
+        {/* drop indicator: above */}
+        {isOver && dragOver?.before && (
+          <div className="absolute -top-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
+        )}
+
+        <div
+          draggable
+          onDragStart={(e) => handleDragStart(e, flatIdx)}
+          onDragOver={(e) => handleDragOver(e, flatIdx)}
+          onDrop={(e) => handleDrop(e, flatIdx)}
+          onDragEnd={handleDragEnd}
+          className={`overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
+            isDragging ? "opacity-30" : "opacity-100"
+          }`}
+        >
+          {/* header */}
+          <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-4">
+            {/* grip handle */}
+            <div className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-zinc-300 hover:text-zinc-400 transition-colors">
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="5"  cy="3.5" r="1.5" />
+                <circle cx="5"  cy="8"   r="1.5" />
+                <circle cx="5"  cy="12.5" r="1.5" />
+                <circle cx="11" cy="3.5" r="1.5" />
+                <circle cx="11" cy="8"   r="1.5" />
+                <circle cx="11" cy="12.5" r="1.5" />
+              </svg>
+            </div>
+
+            <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-zinc-900 leading-snug">{w.nome}</h2>
+                {w.marca && <p className="text-xs text-zinc-400 mt-0.5">{w.marca}</p>}
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                {pivot && (
+                  <div className="text-right">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Estoque</p>
+                    <p className="text-xl font-bold text-zinc-900 tabular-nums leading-tight">{pivot.grandTotal}</p>
+                  </div>
+                )}
+                <button
+                  onClick={() => toggleWidget(w)}
+                  aria-label="Fechar"
+                  className="rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500 transition-colors"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* body */}
+          {!state || state === "loading" ? (
+            <div className="flex items-center justify-center py-14">
+              <svg className="h-5 w-5 animate-spin text-zinc-300" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          ) : state === "error" ? (
+            <div className="flex items-center justify-center py-14 text-xs text-zinc-400">
+              Erro ao carregar dados
+            </div>
+          ) : (
+            <PivotTable pivot={state} />
+          )}
+        </div>
+
+        {/* drop indicator: below */}
+        {isOver && !dragOver?.before && (
+          <div className="absolute -bottom-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
+        )}
+      </div>
+    );
+  };
+
+  // even flat indices → left column, odd → right column
+  const leftWidgets  = widgets.filter((_, i) => i % 2 === 0);
+  const rightWidgets = widgets.filter((_, i) => i % 2 === 1);
+
+  // ── render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* ── Sidebar ───────────────────────────────────────────────────────── */}
       <aside className="w-72 shrink-0 flex flex-col border-r border-zinc-200 bg-white overflow-hidden">
-        {/* Search input */}
+        {/* search */}
         <div className="shrink-0 p-3 border-b border-zinc-100">
           <div className="relative">
             <svg
@@ -97,7 +232,7 @@ export default function CatalogView() {
           </div>
         </div>
 
-        {/* Results list */}
+        {/* results */}
         <div className="flex-1 overflow-y-auto">
           {!query && (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center select-none">
@@ -128,7 +263,6 @@ export default function CatalogView() {
                         selected ? "bg-zinc-50" : "hover:bg-zinc-50/80"
                       }`}
                     >
-                      {/* Checkbox */}
                       <span className={`shrink-0 flex h-4 w-4 items-center justify-center rounded border transition-colors ${
                         selected
                           ? "border-zinc-900 bg-zinc-900"
@@ -140,7 +274,6 @@ export default function CatalogView() {
                           </svg>
                         )}
                       </span>
-
                       <div className="flex-1 min-w-0">
                         <p className="truncate text-sm font-medium text-zinc-900 leading-snug">{p.nome}</p>
                         <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
@@ -158,13 +291,11 @@ export default function CatalogView() {
           )}
         </div>
 
-        {/* Footer: selected count */}
+        {/* footer */}
         {widgets.length > 0 && (
           <div className="shrink-0 border-t border-zinc-100 px-3 py-2 bg-zinc-50">
             <p className="text-xs text-zinc-400">
-              {widgets.length === 1
-                ? "1 produto selecionado"
-                : `${widgets.length} produtos selecionados`}
+              {widgets.length === 1 ? "1 produto selecionado" : `${widgets.length} produtos selecionados`}
             </p>
           </div>
         )}
@@ -180,58 +311,15 @@ export default function CatalogView() {
             <p className="text-sm text-zinc-400">Selecione produtos na barra lateral</p>
           </div>
         ) : (
-          <div className="p-6 columns-2 gap-5">
-            {widgets.map((w) => {
-              const state = pivots.get(w.key);
-              const pivot = state && state !== "loading" && state !== "error" ? state : null;
-
-              return (
-                <div key={w.key} className="break-inside-avoid mb-5 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-                  {/* Widget header */}
-                  <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
-                    <div className="min-w-0">
-                      <h2 className="text-sm font-semibold text-zinc-900 leading-snug">{w.nome}</h2>
-                      {w.marca && <p className="text-xs text-zinc-400 mt-0.5">{w.marca}</p>}
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {pivot && (
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Estoque</p>
-                          <p className="text-xl font-bold text-zinc-900 tabular-nums leading-tight">
-                            {pivot.grandTotal}
-                          </p>
-                        </div>
-                      )}
-                      <button
-                        onClick={() => toggleWidget(w)}
-                        aria-label="Fechar"
-                        className="rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500 transition-colors"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Widget body */}
-                  {!state || state === "loading" ? (
-                    <div className="flex items-center justify-center py-14">
-                      <svg className="h-5 w-5 animate-spin text-zinc-300" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    </div>
-                  ) : state === "error" ? (
-                    <div className="flex items-center justify-center py-14 text-xs text-zinc-400">
-                      Erro ao carregar dados
-                    </div>
-                  ) : (
-                    <PivotTable pivot={state} />
-                  )}
-                </div>
-              );
-            })}
+          <div className="p-6 flex gap-5 items-start">
+            {/* left column: items at even flat indices (0, 2, 4…) */}
+            <div className="flex-1 flex flex-col gap-5 min-w-0">
+              {leftWidgets.map((w, colIdx) => renderWidget(w, colIdx * 2))}
+            </div>
+            {/* right column: items at odd flat indices (1, 3, 5…) */}
+            <div className="flex-1 flex flex-col gap-5 min-w-0">
+              {rightWidgets.map((w, colIdx) => renderWidget(w, colIdx * 2 + 1))}
+            </div>
           </div>
         )}
       </main>
