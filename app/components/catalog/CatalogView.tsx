@@ -124,7 +124,7 @@ export default function CatalogView() {
           onDragOver={(e) => handleDragOver(e, flatIdx)}
           onDrop={(e) => handleDrop(e, flatIdx)}
           onDragEnd={handleDragEnd}
-          className={`overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
+          className={`rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
             isDragging ? "opacity-30" : "opacity-100"
           }`}
         >
@@ -180,7 +180,9 @@ export default function CatalogView() {
               Erro ao carregar dados
             </div>
           ) : (
-            <PivotTable pivot={state} />
+            <div className="overflow-hidden rounded-b-xl">
+              <PivotTable pivot={state} />
+            </div>
           )}
         </div>
 
