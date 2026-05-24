@@ -180,16 +180,13 @@ export default function CatalogView() {
             <p className="text-sm text-zinc-400">Selecione produtos na barra lateral</p>
           </div>
         ) : (
-          <div
-            className="p-6 grid gap-5"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 560px), 1fr))" }}
-          >
+          <div className="p-6 columns-2 gap-5">
             {widgets.map((w) => {
               const state = pivots.get(w.key);
               const pivot = state && state !== "loading" && state !== "error" ? state : null;
 
               return (
-                <div key={w.key} className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                <div key={w.key} className="break-inside-avoid mb-5 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                   {/* Widget header */}
                   <div className="flex items-start justify-between gap-3 border-b border-zinc-100 px-5 py-4">
                     <div className="min-w-0">
