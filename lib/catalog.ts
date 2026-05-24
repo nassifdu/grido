@@ -7,6 +7,7 @@ export interface ProductSummary {
   groupId: number;    // parentId for grouped, id for childless
   nome: string;
   variantCount: number;
+  colorCount: number;
   marca: string | null;
   totalEstoque: number;
 }
@@ -90,7 +91,7 @@ export async function searchProducts(
   const items = await buildTransformed();
   const q = query.trim().toLowerCase();
 
-  type G = { key: string; groupId: number; nome: string; marca: string | null; count: number; totalEstoque: number };
+  type G = { key: string; groupId: number; nome: string; marca: string | null; count: number; totalEstoque: number; colors: Set<string> };
   const groups = new Map<string, G>();
 
   for (const item of items) {
@@ -103,11 +104,14 @@ export async function searchProducts(
         marca: item.marca,
         count: 0,
         totalEstoque: 0,
+        colors: new Set(),
       });
     }
     const g = groups.get(k)!;
     g.count++;
     g.totalEstoque += item.estoque;
+    const { cor } = parseVariacao(item.variacao_nome);
+    if (cor) g.colors.add(cor);
   }
 
   const sorted = [...groups.values()].sort((a, b) =>
@@ -122,6 +126,7 @@ export async function searchProducts(
       groupId: g.groupId,
       nome: g.nome,
       variantCount: g.count,
+      colorCount: g.colors.size,
       marca: g.marca,
       totalEstoque: g.totalEstoque,
     });

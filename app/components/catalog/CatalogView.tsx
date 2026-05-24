@@ -278,6 +278,9 @@ export default function CatalogView() {
                         <p className="truncate text-sm font-medium text-zinc-900 leading-snug">{p.nome}</p>
                         <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
                           {p.totalEstoque} un.
+                          {p.colorCount > 0 && (
+                            <span className="ml-1.5 text-zinc-300">· {p.colorCount} cor.</span>
+                          )}
                           {p.variantCount > 1 && (
                             <span className="ml-1.5 text-zinc-300">· {p.variantCount} var.</span>
                           )}
