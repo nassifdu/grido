@@ -41,7 +41,10 @@ export default function SyncLastTime() {
         if (res.ok) {
           const data: ServerStatus = await res.json();
           setLastSyncAt(data.last_sync_at);
-          setIsSyncing(data.status === "syncing");
+          const isStale = data.sync_started_at
+            ? Date.now() - new Date(data.sync_started_at).getTime() > 10 * 60 * 1000
+            : false;
+          setIsSyncing(data.status === "syncing" && !isStale);
         }
       } catch {
         // silently ignore
