@@ -115,45 +115,10 @@ export async function POST(request: NextRequest) {
       const pendingVars: Record<string, unknown>[] = [];
       let processed = 0;
 
-      // Build lookup: parentId → children already present in allProducts
-      const childrenByParent = new Map<number, Record<string, unknown>[]>();
-      for (const p of allProducts) {
-        const pid = p.idProdutoPai as number | undefined;
-        if (pid != null) {
-          if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
-          childrenByParent.get(pid)!.push(p);
-        }
-      }
-
-      // Parents whose children are already in allProducts — no API call needed
-      const parentIdsNeedingFetch: number[] = [];
-      for (const parentId of parentIds) {
-        const children = childrenByParent.get(parentId);
-        if (children && children.length > 0) {
-          for (const child of children) {
-            pendingVars.push({ id: child.id, id_produto_pai: parentId, data: child, synced_at: now });
-          }
-          processed++;
-          await writer.write(
-            sse({ type: "progress", step: "variacoes", current: processed, total: parentIds.length })
-          );
-        } else {
-          parentIdsNeedingFetch.push(parentId);
-        }
-      }
-
-      // Flush after covering parents whose children were already fetched
-      if (pendingVars.length >= 200) {
-        const { error } = await getSupabase()
-          .from("bling_variacoes")
-          .upsert([...pendingVars], { onConflict: "id" });
-        if (error) throw new Error(`Supabase variacoes upsert: ${error.message}`);
-        pendingVars.length = 0;
-      }
-
-      // Remaining parents — batched concurrent API fetches (3 at a time, ~2.7 req/s)
-      for (let i = 0; i < parentIdsNeedingFetch.length; i += CONCURRENCY) {
-        const batch = parentIdsNeedingFetch.slice(i, i + CONCURRENCY);
+      // All parent IDs must be fetched from /produtos/variacoes/{parentId} —
+      // the /produtos list response lacks the variacao.nome (Cor/Tamanho) attributes.
+      for (let i = 0; i < parentIds.length; i += CONCURRENCY) {
+        const batch = parentIds.slice(i, i + CONCURRENCY);
 
         const results = await Promise.allSettled(
           batch.map((parentId) => blingFetch(blingUserId, `/produtos/variacoes/${parentId}`))
@@ -190,7 +155,7 @@ export async function POST(request: NextRequest) {
           pendingVars.length = 0;
         }
 
-        if (i + CONCURRENCY < parentIdsNeedingFetch.length) await delay(1100);
+        if (i + CONCURRENCY < parentIds.length) await delay(1100);
       }
 
       // flush remaining variations
