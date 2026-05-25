@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { saveBlingTokens } from "@/lib/bling";
 import { createSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session";
 
@@ -72,11 +73,11 @@ export async function GET(request: NextRequest) {
   await saveBlingTokens(blingUserId, access_token, refresh_token, expires_in ?? 3600);
 
   const sessionToken = await createSession(blingUserId);
-  const res = NextResponse.redirect(new URL("/dashboard", request.url));
+  const cookieStore = await cookies();
 
-  res.cookies.delete("pkce_verifier");
-  res.cookies.delete("oauth_state");
-  res.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
+  cookieStore.delete("pkce_verifier");
+  cookieStore.delete("oauth_state");
+  cookieStore.set(SESSION_COOKIE_NAME, sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -84,5 +85,5 @@ export async function GET(request: NextRequest) {
     path: "/",
   });
 
-  return res;
+  return NextResponse.redirect(new URL("/dashboard", request.url));
 }

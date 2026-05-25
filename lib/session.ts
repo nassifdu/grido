@@ -32,12 +32,23 @@ export async function createSession(blingUserId: string): Promise<string> {
 }
 
 export async function getSession(req: NextRequest): Promise<string | null> {
-  const secret = process.env.SESSION_SECRET!;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    console.error("[session] SESSION_SECRET env var is not set");
+    return null;
+  }
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  if (!token) {
+    console.warn("[session] no session cookie found");
+    return null;
+  }
 
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3) {
+    console.warn("[session] malformed token (not 3 parts)");
+    return null;
+  }
   const [header, payload, sig] = parts;
 
   const key = await importKey(secret);
@@ -48,13 +59,20 @@ export async function getSession(req: NextRequest): Promise<string | null> {
     sigBytes,
     enc.encode(`${header}.${payload}`)
   );
-  if (!valid) return null;
+  if (!valid) {
+    console.warn("[session] signature verification failed — SESSION_SECRET mismatch or tampered token");
+    return null;
+  }
 
   try {
     const { sub, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    if (Math.floor(Date.now() / 1000) > exp) return null;
+    if (Math.floor(Date.now() / 1000) > exp) {
+      console.warn("[session] token expired");
+      return null;
+    }
     return sub as string;
   } catch {
+    console.warn("[session] failed to parse payload");
     return null;
   }
 }

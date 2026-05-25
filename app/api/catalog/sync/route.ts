@@ -25,12 +25,10 @@ async function updateSyncStatus(
 ) {
   const { error } = await getSupabase()
     .from("sync_metadata")
-    .upsert({
-      bling_user_id: blingUserId,
-      status,
-      updated_at: new Date().toISOString(),
-      ...updates,
-    });
+    .upsert(
+      { bling_user_id: blingUserId, status, updated_at: new Date().toISOString(), ...updates },
+      { onConflict: "bling_user_id" }
+    );
   if (error) console.error("Failed to update sync metadata:", error);
 }
 
