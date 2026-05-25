@@ -85,18 +85,26 @@ export async function blingFetch(
     ? await refreshBlingTokens(blingUserId)
     : tokens.accessToken;
 
-  const res = await fetch(`${BLING_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...options?.headers,
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`[blingFetch] ${path} → ${res.status}`, body);
+  try {
+    const res = await fetch(`${BLING_BASE}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...options?.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[blingFetch] ${path} → ${res.status}`, body);
+    }
+
+    return res;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res;
 }
