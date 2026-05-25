@@ -236,7 +236,7 @@ export default function CatalogView() {
         ) : (
           <div className="p-6">
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-              <table className="w-full border-collapse text-sm">
+              <table className="w-auto border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap w-px border-r border-zinc-200">
