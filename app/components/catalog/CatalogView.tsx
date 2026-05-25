@@ -24,7 +24,6 @@ function sortSizes(sizes: string[]): string[] {
 
 function stockClass(val: number): string {
   if (val === 0) return "text-zinc-300";
-  if (val <= 2) return "text-amber-500 font-semibold";
   if (val >= 10) return "text-emerald-700 font-medium";
   return "text-zinc-700";
 }
@@ -46,6 +45,11 @@ export default function CatalogView() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSubtotals, setShowSubtotals] = useState(true);
   const [showZeros, setShowZeros] = useState(true);
+  const [starredCells, setStarredCells] = useState<Set<string>>(new Set());
+  const [cellAnnotations, setCellAnnotations] = useState<Map<string, number>>(new Map());
+  const [annotatingCell, setAnnotatingCell] = useState<string | null>(null);
+  const [annotationInput, setAnnotationInput] = useState("");
+  const skipBlurRef = useRef(false);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -118,6 +122,31 @@ export default function CatalogView() {
       setPivots((prev) => new Map(prev).set(product.key, "error"));
     }
   };
+
+  // ── cell star / annotation ───────────────────────────────────────────────────
+
+  function toggleStar(key: string) {
+    setStarredCells((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function openAnnotation(key: string, current: number | undefined) {
+    setAnnotatingCell(key);
+    setAnnotationInput(current !== undefined ? String(current) : "");
+  }
+
+  function commitAnnotation(key: string, input: string) {
+    const num = parseInt(input, 10);
+    setCellAnnotations((prev) => {
+      const next = new Map(prev);
+      if (!input.trim() || isNaN(num) || num <= 0) next.delete(key); else next.set(key, num);
+      return next;
+    });
+    setAnnotatingCell(null);
+  }
 
   // ── render ───────────────────────────────────────────────────────────────────
 
@@ -375,14 +404,75 @@ export default function CatalogView() {
                             </td>
                             {allSizes.map((s) => {
                               const val = row.cells[s]?.estoque ?? 0;
+                              const cellKey = `${product.key}|||${row.cor ?? ""}|||${s}`;
+                              const isStarred = starredCells.has(cellKey);
+                              const annotation = cellAnnotations.get(cellKey);
+                              const isAnnotating = annotatingCell === cellKey;
                               return (
-                                <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
-                                  {val === 0 ? (
-                                    showZeros
-                                      ? <span className="text-red-400">0</span>
-                                      : <span className="opacity-30">·</span>
-                                  ) : (
-                                    <span className={stockClass(val)}>{val}</span>
+                                <td
+                                  key={s}
+                                  className={`relative px-3 py-2.5 text-center tabular-nums border-r border-zinc-100 group${isStarred ? " bg-amber-50" : ""}`}
+                                >
+                                  {/* star button — top-left */}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleStar(cellKey); }}
+                                    title="Destacar"
+                                    className={`absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                  >
+                                    <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
+                                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                    </svg>
+                                  </button>
+
+                                  {/* annotation "+N" — top-right, visible when set and not editing */}
+                                  {annotation !== undefined && !isAnnotating && (
+                                    <span className="absolute top-0 right-0.5 text-[8px] font-bold leading-none text-amber-500 pointer-events-none">
+                                      +{annotation}
+                                    </span>
+                                  )}
+
+                                  {/* plus button — top-right, on hover (or always if annotation set) */}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
+                                    title="Anotar"
+                                    className={`absolute top-0.5 right-0.5 rounded transition-opacity ${annotation !== undefined ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                  >
+                                    <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
+                                    </svg>
+                                  </button>
+
+                                  {/* annotation input overlay */}
+                                  {isAnnotating && (
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
+                                      <input
+                                        ref={(el) => { if (el) { el.focus(); el.select(); } }}
+                                        type="number"
+                                        min="1"
+                                        value={annotationInput}
+                                        onChange={(e) => setAnnotationInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") { skipBlurRef.current = true; commitAnnotation(cellKey, annotationInput); }
+                                          else if (e.key === "Escape") { skipBlurRef.current = true; setAnnotatingCell(null); }
+                                        }}
+                                        onBlur={() => {
+                                          if (skipBlurRef.current) { skipBlurRef.current = false; return; }
+                                          commitAnnotation(cellKey, annotationInput);
+                                        }}
+                                        className="w-10 py-0.5 text-center text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* value */}
+                                  {!isAnnotating && (
+                                    val === 0 ? (
+                                      showZeros
+                                        ? <span className="text-red-400">0</span>
+                                        : <span className="opacity-30">·</span>
+                                    ) : (
+                                      <span className={stockClass(val)}>{val}</span>
+                                    )
                                   )}
                                 </td>
                               );
