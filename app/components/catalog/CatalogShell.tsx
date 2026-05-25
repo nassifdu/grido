@@ -10,9 +10,9 @@ export default function CatalogShell() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-zinc-50">
       <header className="shrink-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur px-6 py-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-5">
-            <span className="text-base font-bold tracking-tight text-zinc-900">Grido</span>
+        <div className="flex items-center justify-between gap-8">
+          <div className="flex items-center gap-5 min-w-0">
+            <span className="text-base font-bold tracking-tight text-zinc-900 shrink-0">Grido</span>
             <nav className="flex items-center gap-1 text-sm">
               <a
                 href="/dashboard"
@@ -25,7 +25,7 @@ export default function CatalogShell() {
               </span>
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-sm text-zinc-500 select-none">Subtotais</span>
               <button

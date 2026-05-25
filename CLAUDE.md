@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Getting Started
 
 1. **Set up environment:** Copy the required vars from the Env Vars section into `.env.local`
-2. **Migrations:** Run `supabase/migrations/001_bling_tokens.sql` then `002_catalog_cache.sql` in your Supabase project (cloud or local CLI)
+2. **Migrations:** Run `supabase/migrations/001_bling_tokens.sql`, `002_catalog_cache.sql`, and `003_sync_metadata.sql` in your Supabase project (cloud or local CLI)
 3. **Seed data:** `npx tsx scripts/seed-catalog.ts` (reads `data/produtos.json` and `data/variacoes.json`)
 4. **Dev server:** `npm run dev` → http://localhost:3000
 
@@ -64,7 +64,7 @@ This reads `data/produtos.json` and `data/variacoes.json` and upserts them into 
 
 **Inspect Supabase data:** Query `bling_produtos` and `bling_variacoes` directly in Supabase dashboard. Cache results are in memory (30s TTL in `buildTransformed`).
 
-**Catalog sync issues:** The `/api/catalog/sync` endpoint streams SSE progress. Variations phase is sequential with 400ms delays (~10 min for ~970 products). Watch the browser console for stream events.
+**Catalog sync issues:** The `/api/catalog/sync` endpoint streams SSE progress and stores sync status server-side. Sync state is persisted in the `sync_metadata` table, so the UI recovers gracefully if the tab is backgrounded or the SSE stream closes. The `SyncButton` has fallback polling (every 2s) that detects when sync completes even if the stream is interrupted. The `SyncStatus` component on the dashboard shows the last sync time and current sync state, refreshing every 10s. Variations phase is sequential with 400ms delays (~10 min for ~970 products).
 
 **Auth flow:** Login hits `/api/auth/login` (PKCE setup) → Bling OAuth → `/api/auth/callback` (token exchange + session cookie). Session JWTs are issued/verified in `lib/session.ts` with `blingUserId` in the `sub` claim.
 
@@ -113,6 +113,17 @@ The catalog sync (`/api/catalog/sync`, POST) streams SSE progress events while i
 
 Size ordering: numeric sizes sort numerically; letter sizes follow a hard-coded fashion sequence (RN → PP → P → M → G → GG …).
 
+### Sync metadata & status
+
+The `sync_metadata` table tracks the status of catalog syncs:
+- `bling_user_id` — unique per user
+- `status` — 'idle', 'syncing', 'done', or 'error'
+- `last_sync_at` — timestamp of the most recent successful sync
+- `sync_started_at` — timestamp when the current (or most recent) sync began
+- `error_message` — human-readable error, if status is 'error'
+
+The `/api/catalog/sync/status` endpoint allows clients to poll sync state, enabling the UI to detect completion even if the SSE stream closes (e.g., tab backgrounded).
+
 ### API routes
 
 | Route | Method | Purpose |
@@ -122,7 +133,8 @@ Size ordering: numeric sizes sort numerically; letter sizes follow a hard-coded 
 | `/api/auth/logout` | POST | Clear session cookie |
 | `/api/catalog` | GET | Search products (`?q=&limit=`) |
 | `/api/catalog/[parentId]` | GET | Pivot data for a product group |
-| `/api/catalog/sync` | POST | SSE stream: fetch Bling → upsert Supabase |
+| `/api/catalog/sync` | POST | SSE stream: fetch Bling → upsert Supabase, update sync_metadata |
+| `/api/catalog/sync/status` | GET | Fetch current sync status for the authenticated user |
 | `/api/bling/sync` | POST | Generic proxy: sync any Bling resource to Supabase |
 
 ### Frontend
@@ -148,5 +160,10 @@ The navbar includes a toggle switch (black/white) beside the Sync button that co
 - Toggle state is managed in `CatalogShell`
 - Passed to `CatalogView` as `showSubtotals` prop
 - Subtotal rows render conditionally based on this prop
+
+**Sync status display:**
+- `SyncButton` (catalog navbar) — shows real-time SSE progress during sync, with fallback polling for interruptions
+- `SyncStatus` (dashboard navbar) — displays last sync timestamp and current sync state, refreshing every 10s
+- `DashboardHeader` — wraps the dashboard navbar and includes both the account ID badge and the SyncStatus badge
 
 `lib/supabase.ts` uses a lazy singleton (`getSupabase()`) to avoid instantiating the client at build time.

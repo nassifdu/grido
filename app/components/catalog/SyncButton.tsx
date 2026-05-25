@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type SyncState =
   | { status: "idle" }
@@ -9,8 +9,62 @@ type SyncState =
   | { status: "done" }
   | { status: "error"; message: string };
 
+type ServerSyncStatus = {
+  status: "idle" | "syncing" | "done" | "error";
+  last_sync_at: string | null;
+  sync_started_at: string | null;
+  error_message: string | null;
+};
+
 export default function SyncButton() {
   const [state, setState] = useState<SyncState>({ status: "idle" });
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch status from server on mount
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch("/api/catalog/sync/status");
+        if (res.ok) {
+          const data: ServerSyncStatus = await res.json();
+          if (data.status === "syncing") {
+            setState({ status: "syncing", step: "produtos", count: 0 });
+          } else if (data.status === "error") {
+            setState({ status: "error", message: data.error_message || "Erro desconhecido" });
+          }
+        }
+      } catch {
+        // silently ignore fetch errors on mount
+      }
+    };
+
+    fetchStatus();
+  }, []);
+
+  // Poll server status while syncing or show error
+  useEffect(() => {
+    if (state.status !== "syncing" && state.status !== "error") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/catalog/sync/status");
+        if (res.ok) {
+          const data: ServerSyncStatus = await res.json();
+          if (data.status === "idle") {
+            setState({ status: "done" });
+            setTimeout(() => setState({ status: "idle" }), 3000);
+            clearInterval(interval);
+          } else if (data.status === "error") {
+            setState({ status: "error", message: data.error_message || "Erro" });
+          }
+        }
+      } catch {
+        // continue polling on fetch errors
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state.status]);
 
   async function startSync() {
     setState({ status: "syncing", step: "produtos", count: 0 });
@@ -31,11 +85,38 @@ export default function SyncButton() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let streamActive = true;
+
+    // Set up fallback polling in case stream closes
+    const fallbackPoll = setInterval(async () => {
+      if (!streamActive) return;
+      try {
+        const res = await fetch("/api/catalog/sync/status");
+        if (res.ok) {
+          const data: ServerSyncStatus = await res.json();
+          if (data.status !== "syncing") {
+            streamActive = false;
+            clearInterval(fallbackPoll);
+            if (data.status === "done") {
+              setState({ status: "done" });
+              setTimeout(() => setState({ status: "idle" }), 3000);
+            } else if (data.status === "error") {
+              setState({ status: "error", message: data.error_message || "Erro" });
+            }
+          }
+        }
+      } catch {
+        // continue polling
+      }
+    }, 2000);
 
     try {
-      while (true) {
+      while (streamActive) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          streamActive = false;
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const chunks = buffer.split("\n\n");
@@ -62,15 +143,24 @@ export default function SyncButton() {
               });
             }
           } else if (event.type === "done") {
+            streamActive = false;
             setState({ status: "done" });
             setTimeout(() => setState({ status: "idle" }), 3000);
           } else if (event.type === "error") {
+            streamActive = false;
             setState({ status: "error", message: (event.message as string) ?? "Erro" });
           }
         }
       }
     } catch {
-      setState({ status: "error", message: "Stream interrompido" });
+      // Stream closed or error - will fall back to polling
+    } finally {
+      clearInterval(fallbackPoll);
+      try {
+        reader.cancel();
+      } catch {
+        // already closed
+      }
     }
   }
 
