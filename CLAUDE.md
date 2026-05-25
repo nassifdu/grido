@@ -127,6 +127,26 @@ Size ordering: numeric sizes sort numerically; letter sizes follow a hard-coded 
 
 ### Frontend
 
-Pages live in `app/` using the App Router. `app/dashboard/catalog/page.tsx` renders `CatalogView` (client component). The catalog UI lets users search products and pin multiple pivot-table widgets simultaneously. Each widget fetches its pivot data independently after being added.
+**Page structure:**
+- `app/dashboard/catalog/page.tsx` (server component) imports and renders `CatalogShell`
+- `app/components/catalog/CatalogShell.tsx` (client component) manages the page layout, navbar, and `showSubtotals` state
+- `app/components/catalog/CatalogView.tsx` (client component) renders the Estoque table and accepts `showSubtotals` prop
+
+**Estoque view:**
+The Estoque (stock) table is a pivot grid (color × size) that displays product stock. Users can search products and pin multiple widgets simultaneously; each widget fetches its pivot data independently.
+
+Table styling:
+- Content-sized (`w-fit`) and centered horizontally via flex container
+- Vertical grid lines on all data cells (`border-r border-zinc-100`)
+- Horizontal grid lines on all data rows (`border-b border-zinc-100`)
+- Rounded corners (`rounded-xl`) with `overflow-hidden` on the card
+- Empty stock values ("0 un.") display in light red (`text-red-400`)
+- Delete buttons ("×") display in light red (`text-red-400`) with hover states
+
+**Subtotals toggle:**
+The navbar includes a toggle switch (black/white) beside the Sync button that controls per-product subtotal row visibility. When enabled (default), each product group shows a "Subtotal" row before the next product; when disabled, only the global "Total" row appears.
+- Toggle state is managed in `CatalogShell`
+- Passed to `CatalogView` as `showSubtotals` prop
+- Subtotal rows render conditionally based on this prop
 
 `lib/supabase.ts` uses a lazy singleton (`getSupabase()`) to avoid instantiating the client at build time.
