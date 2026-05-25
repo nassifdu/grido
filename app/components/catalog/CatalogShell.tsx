@@ -26,16 +26,23 @@ export default function CatalogShell() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowSubtotals((v) => !v)}
-              className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                showSubtotals
-                  ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                  : "text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100"
-              }`}
-            >
-              Subtotais
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-zinc-500 select-none">Subtotais</span>
+              <button
+                role="switch"
+                aria-checked={showSubtotals}
+                onClick={() => setShowSubtotals((v) => !v)}
+                className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
+                  showSubtotals ? "bg-zinc-900" : "bg-zinc-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    showSubtotals ? "translate-x-[18px]" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
             <SyncButton />
             <form action="/api/auth/logout" method="POST">
               <button
