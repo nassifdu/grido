@@ -38,12 +38,14 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-export default function CatalogView({ showSubtotals = true }: { showSubtotals?: boolean }) {
+export default function CatalogView() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductSummary[]>([]);
   const [selected, setSelected] = useState<ProductSummary[]>([]);
   const [pivots, setPivots] = useState<Map<string, PivotState>>(new Map());
   const [isSearching, setIsSearching] = useState(false);
+  const [showSubtotals, setShowSubtotals] = useState(true);
+  const [showZeros, setShowZeros] = useState(true);
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -225,7 +227,7 @@ export default function CatalogView({ showSubtotals = true }: { showSubtotals?: 
       </aside>
 
       {/* ── Main — unified table ─────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-auto bg-zinc-50">
+      <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50">
         {selected.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full select-none">
             <svg className="mb-4 h-12 w-12 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
@@ -234,7 +236,44 @@ export default function CatalogView({ showSubtotals = true }: { showSubtotals?: 
             <p className="text-sm text-zinc-400">Selecione produtos na barra lateral</p>
           </div>
         ) : (
-          <div className="p-6 flex justify-center">
+          <>
+            {/* ── Controls bar ──────────────────────────────────────────────── */}
+            <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-6">
+              {/* Subtotais */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <svg className="h-3.5 w-3.5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 10h18M3 15h18M3 20h10" />
+                </svg>
+                <span className="text-sm text-zinc-500">Subtotais</span>
+                <button
+                  role="switch"
+                  aria-checked={showSubtotals}
+                  onClick={() => setShowSubtotals((v) => !v)}
+                  className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full p-0 transition-colors duration-200 ${showSubtotals ? "bg-zinc-900" : "bg-zinc-300"}`}
+                >
+                  <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showSubtotals ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                </button>
+              </label>
+
+              {/* Mostrar zeros */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <svg className="h-3.5 w-3.5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm text-zinc-500">Mostrar zeros</span>
+                <button
+                  role="switch"
+                  aria-checked={showZeros}
+                  onClick={() => setShowZeros((v) => !v)}
+                  className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full p-0 transition-colors duration-200 ${showZeros ? "bg-zinc-900" : "bg-zinc-300"}`}
+                >
+                  <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showZeros ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                </button>
+              </label>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6 flex justify-center">
             <div className="w-fit rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
               <table className="border-collapse text-sm">
                 <thead>
@@ -338,9 +377,13 @@ export default function CatalogView({ showSubtotals = true }: { showSubtotals?: 
                               const val = row.cells[s]?.estoque ?? 0;
                               return (
                                 <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
-                                  <span className={stockClass(val)}>
-                                    {val === 0 ? <span className="opacity-30">·</span> : val}
-                                  </span>
+                                  {val === 0 ? (
+                                    showZeros
+                                      ? <span className="text-red-400">0</span>
+                                      : <span className="opacity-30">·</span>
+                                  ) : (
+                                    <span className={stockClass(val)}>{val}</span>
+                                  )}
                                 </td>
                               );
                             })}
@@ -389,6 +432,7 @@ export default function CatalogView({ showSubtotals = true }: { showSubtotals?: 
               </table>
             </div>
           </div>
+        </>
         )}
       </main>
 

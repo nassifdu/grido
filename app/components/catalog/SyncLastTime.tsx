@@ -62,13 +62,17 @@ export default function SyncLastTime() {
 
   return (
     <span className="flex items-center gap-1.5 text-xs text-zinc-400">
-      {isSyncing && (
+      {isSyncing ? (
         <svg className="h-3 w-3 animate-spin text-zinc-400" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
+      ) : (
+        <svg className="h-3 w-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0 1 15-4.5L20 9M4 15l1 4.5A9 9 0 0 0 20 15" />
+        </svg>
       )}
-      {isSyncing ? "Sincronizando…" : formatRelative(lastSyncAt)}
+      {isSyncing ? "Sincronizando…" : `Última sincronização: ${formatRelative(lastSyncAt)}`}
     </span>
   );
 }
