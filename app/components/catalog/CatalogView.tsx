@@ -179,7 +179,7 @@ export default function CatalogView() {
         {isAnnotating && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
             <input
-              ref={(el) => { if (el) { el.focus(); el.select(); } }}
+              ref={(el) => { if (el && document.activeElement !== el) { el.focus(); el.select(); } }}
               type="number" min="1" value={annotationInput}
               onChange={(e) => setAnnotationInput(e.target.value)}
               onKeyDown={(e) => {
@@ -329,8 +329,8 @@ export default function CatalogView() {
                   className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${viewMode === "grouped" ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
                 >
                   <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 9h18M3 13h18M3 17h18" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5v12" strokeWidth={2.5} />
+                    <circle cx="5" cy="6" r="2" />
+                    <path strokeLinecap="round" d="M9 6h11M5 8v9M5 13h3M10 13h9M5 17h3M10 17h9" />
                   </svg>
                 </button>
                 <button
@@ -375,6 +375,17 @@ export default function CatalogView() {
                   <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showZeros ? "translate-x-[18px]" : "translate-x-0.5"}`} />
                 </button>
               </label>
+
+              {/* Limpar */}
+              <button
+                onClick={() => { setSelected([]); setPivots(new Map()); }}
+                className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Limpar
+              </button>
             </div>
 
             <div className="flex-1 overflow-auto p-6">
@@ -478,9 +489,17 @@ export default function CatalogView() {
 
                             {pivot?.isChildless && (
                               <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
-                                  {pivot.parentCodigo && <code className="mr-2 font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
-                                  <span className="text-zinc-400 italic text-xs">{pivot.childlessCodigo ?? "sem variações"}</span>
+                                <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
+                                      className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                    {pivot.parentCodigo && <code className="font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
+                                    <span className="text-zinc-400 italic text-xs">{pivot.childlessCodigo ?? "sem variações"}</span>
+                                  </div>
                                 </td>
                                 {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
@@ -489,9 +508,20 @@ export default function CatalogView() {
 
                             {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
                               <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
-                                  {pivot.parentCodigo && <code className="mr-2 font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
-                                  {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                  <div className="flex items-center gap-2">
+                                    {rowIdx === 0 && (
+                                      <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
+                                        className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                    {rowIdx > 0 && <span className="w-4 shrink-0" />}
+                                    {pivot.parentCodigo && <code className="font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
+                                    {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                  </div>
                                 </td>
                                 {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
