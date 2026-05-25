@@ -234,7 +234,7 @@ export default function CatalogView() {
             <p className="text-sm text-zinc-400">Selecione produtos na barra lateral</p>
           </div>
         ) : (
-          <div className="p-6 overflow-x-auto">
+          <div className="p-6 flex justify-center">
             <div className="w-fit rounded-xl border border-zinc-200 bg-white shadow-sm">
               <table className="border-collapse text-sm">
                 <thead>
