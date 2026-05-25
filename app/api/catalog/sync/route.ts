@@ -18,6 +18,22 @@ async function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function updateSyncStatus(
+  blingUserId: string,
+  status: string,
+  updates: { last_sync_at?: string; sync_started_at?: string; error_message?: string }
+) {
+  const { error } = await getSupabase()
+    .from("sync_metadata")
+    .upsert({
+      bling_user_id: blingUserId,
+      status,
+      updated_at: new Date().toISOString(),
+      ...updates,
+    });
+  if (error) console.error("Failed to update sync metadata:", error);
+}
+
 export async function POST(request: NextRequest) {
   const blingUserId = await getSession(request);
   if (!blingUserId) {
@@ -26,6 +42,12 @@ export async function POST(request: NextRequest) {
 
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
+
+  const syncStartedAt = new Date().toISOString();
+  await updateSyncStatus(blingUserId, "syncing", {
+    sync_started_at: syncStartedAt,
+    error_message: null,
+  });
 
   (async () => {
     try {
@@ -142,9 +164,11 @@ export async function POST(request: NextRequest) {
       }
 
       clearTransformCache();
+      await updateSyncStatus(blingUserId, "done", { last_sync_at: now });
       await writer.write(sse({ type: "done" }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
+      await updateSyncStatus(blingUserId, "error", { error_message: message });
       try {
         await writer.write(sse({ type: "error", message }));
       } catch {
