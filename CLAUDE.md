@@ -2,6 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## TL;DR
+
+**Grido** is a Next.js dashboard that connects to Bling ERP, caches product data in Supabase, and renders stock pivot tables (color × size grids). You can:
+- Search products via Bling → display as pivot grid
+- Sync Bling catalog to Supabase cache (SSE-streamed progress)
+- Pin multiple pivot widgets simultaneously on the dashboard
+- Auth is handled via Bling OAuth + encrypted token storage
+
+## Getting Started
+
+1. **Set up environment:** Copy the required vars from the Env Vars section into `.env.local`
+2. **Migrations:** Run `supabase/migrations/001_bling_tokens.sql` then `002_catalog_cache.sql` in your Supabase project (cloud or local CLI)
+3. **Seed data:** `npx tsx scripts/seed-catalog.ts` (reads `data/produtos.json` and `data/variacoes.json`)
+4. **Dev server:** `npm run dev` → http://localhost:3000
+
 ## Commands
 
 ```bash
@@ -10,7 +25,28 @@ npm run build    # production build (also type-checks)
 npm run start    # serve production build
 ```
 
-There is no test runner or lint script configured.
+No test runner or lint script configured.
+
+## Project Structure
+
+```
+app/
+  api/              # Next.js API routes (auth, catalog, sync)
+  dashboard/        # Authenticated pages
+  page.tsx          # Landing page
+lib/
+  bling.ts          # Bling API client (token mgmt, auto-refresh)
+  catalog.ts        # Product search & pivot queries
+  crypto.ts         # AES token encryption
+  session.ts        # JWT session verification (no library)
+  supabase.ts       # Supabase client singleton
+  transform.ts      # Bling data → flat format (cached 30s)
+supabase/
+  migrations/       # SQL: tokens table, catalog cache tables
+data/
+  produtos.json     # Local product snapshot (for seeding)
+  variacoes.json    # Local variation snapshot
+```
 
 ## Seed local data into Supabase
 
@@ -21,6 +57,16 @@ npx tsx scripts/seed-catalog.ts
 ```
 
 This reads `data/produtos.json` and `data/variacoes.json` and upserts them into `bling_produtos` / `bling_variacoes`. The tables must exist first (run `supabase/migrations/002_catalog_cache.sql`).
+
+## Debugging
+
+**Check token refresh:** Look at `lib/bling.ts:blingFetch` — it auto-refreshes tokens <5 min from expiry. If seeing 401s, tokens likely expired; check Supabase `bling_tokens` table.
+
+**Inspect Supabase data:** Query `bling_produtos` and `bling_variacoes` directly in Supabase dashboard. Cache results are in memory (30s TTL in `buildTransformed`).
+
+**Catalog sync issues:** The `/api/catalog/sync` endpoint streams SSE progress. Variations phase is sequential with 400ms delays (~10 min for ~970 products). Watch the browser console for stream events.
+
+**Auth flow:** Login hits `/api/auth/login` (PKCE setup) → Bling OAuth → `/api/auth/callback` (token exchange + session cookie). Session JWTs are issued/verified in `lib/session.ts` with `blingUserId` in the `sub` claim.
 
 ## Environment Variables
 

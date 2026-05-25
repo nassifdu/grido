@@ -1,7 +1,7 @@
 import CatalogView from "@/app/components/catalog/CatalogView";
 import SyncButton from "@/app/components/catalog/SyncButton";
 
-export const metadata = { title: "Catálogo · Grido" };
+export const metadata = { title: "Estoque · Grido" };
 
 export default function CatalogPage() {
   return (
@@ -18,7 +18,7 @@ export default function CatalogPage() {
                 Dashboard
               </a>
               <span className="rounded-md px-2.5 py-1.5 font-medium text-zinc-900 bg-zinc-100">
-                Catálogo
+                Estoque
               </span>
             </nav>
           </div>

@@ -180,13 +180,15 @@ export default function CatalogView() {
                         <p className="text-sm font-medium text-zinc-900 leading-snug break-words whitespace-normal">
                           {p.nome}
                         </p>
-                        <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
-                          {p.totalEstoque} un.
+                        <p className="text-xs mt-0.5 tabular-nums">
+                          <span className={p.totalEstoque === 0 ? "text-red-400" : "text-zinc-400"}>
+                            {p.totalEstoque} un.
+                          </span>
                           {p.colorCount > 0 && (
-                            <span className="ml-1.5 text-zinc-300">· {p.colorCount} cor.</span>
+                            <span className="ml-1.5 text-zinc-400">· {p.colorCount} cor.</span>
                           )}
                           {p.variantCount > 1 && (
-                            <span className="ml-1.5 text-zinc-300">· {p.variantCount} var.</span>
+                            <span className="ml-1.5 text-zinc-400">· {p.variantCount} var.</span>
                           )}
                         </p>
                       </div>
@@ -223,13 +225,13 @@ export default function CatalogView() {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap w-px border-r border-zinc-200">
                       Cor
                     </th>
                     {allSizes.map((s) => (
                       <th
                         key={s}
-                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap min-w-[3.5rem]"
+                        className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap min-w-[2rem] border-r border-zinc-200"
                       >
                         {s}
                       </th>
@@ -267,7 +269,7 @@ export default function CatalogView() {
                               <button
                                 onClick={() => toggleProduct(product)}
                                 aria-label="Remover produto"
-                                className="flex-none rounded-md p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200 transition-colors"
+                                className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                               >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -297,12 +299,12 @@ export default function CatalogView() {
 
                         {/* childless product (no variants) */}
                         {pivot?.isChildless && (
-                          <tr className="hover:bg-zinc-50/70 transition-colors">
-                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic">
+                          <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic w-px border-r border-zinc-100">
                               {pivot.childlessCodigo ?? "sem variações"}
                             </td>
                             {allSizes.map((s) => (
-                              <td key={s} className="px-3 py-2.5 text-center text-zinc-200">·</td>
+                              <td key={s} className="px-2 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>
                             ))}
                             <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
                               {pivot.grandTotal}
@@ -312,8 +314,8 @@ export default function CatalogView() {
 
                         {/* color rows */}
                         {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
-                          <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors">
-                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap">
+                          <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap w-px border-r border-zinc-100">
                               {row.cor ?? (
                                 <span className="text-zinc-400 italic text-xs">sem cor</span>
                               )}
@@ -321,7 +323,7 @@ export default function CatalogView() {
                             {allSizes.map((s) => {
                               const val = row.cells[s]?.estoque ?? 0;
                               return (
-                                <td key={s} className="px-3 py-2.5 text-center tabular-nums">
+                                <td key={s} className="px-2 py-2.5 text-center tabular-nums border-r border-zinc-100">
                                   <span className={stockClass(val)}>
                                     {val === 0 ? <span className="opacity-30">·</span> : val}
                                   </span>
@@ -336,12 +338,12 @@ export default function CatalogView() {
 
                         {/* per-product subtotal */}
                         {pivot && !pivot.isChildless && (
-                          <tr className="border-t border-zinc-100 bg-zinc-50/60">
-                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                          <tr className="border-t border-zinc-200 bg-zinc-50/60">
+                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 w-px border-r border-zinc-100">
                               Total
                             </td>
                             {allSizes.map((s) => (
-                              <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums">
+                              <td key={s} className="px-2 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
                                 {pivot.totals[s] ?? 0}
                               </td>
                             ))}

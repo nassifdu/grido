@@ -90,8 +90,8 @@ export default async function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-zinc-900">Catálogo</p>
-                  <p className="text-xs text-zinc-500">Grade analítica de estoque</p>
+                  <p className="text-sm font-semibold text-zinc-900">Estoque</p>
+                  <p className="text-xs text-zinc-500">Grade analítica dinâmica</p>
                 </div>
                 <svg
                   className="ml-auto h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors"
