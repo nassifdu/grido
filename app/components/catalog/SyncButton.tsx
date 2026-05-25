@@ -18,7 +18,6 @@ type ServerSyncStatus = {
 
 export default function SyncButton() {
   const [state, setState] = useState<SyncState>({ status: "idle" });
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Fetch status from server on mount
   useEffect(() => {
@@ -41,21 +40,26 @@ export default function SyncButton() {
     fetchStatus();
   }, []);
 
-  // Poll server status while syncing or show error
+  // Poll server status while syncing (not on error — error is a terminal state from the POST)
   useEffect(() => {
-    if (state.status !== "syncing" && state.status !== "error") return;
+    if (state.status !== "syncing") return;
 
     const interval = setInterval(async () => {
       try {
         const res = await fetch("/api/catalog/sync/status");
+        if (res.status === 401) {
+          clearInterval(interval);
+          return;
+        }
         if (res.ok) {
           const data: ServerSyncStatus = await res.json();
-          if (data.status === "idle") {
+          if (data.status === "idle" || data.status === "done") {
             setState({ status: "done" });
             setTimeout(() => setState({ status: "idle" }), 3000);
             clearInterval(interval);
           } else if (data.status === "error") {
             setState({ status: "error", message: data.error_message || "Erro" });
+            clearInterval(interval);
           }
         }
       } catch {
@@ -92,21 +96,23 @@ export default function SyncButton() {
       if (!streamActive) return;
       try {
         const res = await fetch("/api/catalog/sync/status");
-        if (res.ok) {
-          const data: ServerSyncStatus = await res.json();
-          if (data.status !== "syncing") {
-            streamActive = false;
-            clearInterval(fallbackPoll);
-            if (data.status === "done") {
-              setState({ status: "done" });
-              setTimeout(() => setState({ status: "idle" }), 3000);
-            } else if (data.status === "error") {
-              setState({ status: "error", message: data.error_message || "Erro" });
-            }
+        if (res.status === 401 || !res.ok) {
+          clearInterval(fallbackPoll);
+          return;
+        }
+        const data: ServerSyncStatus = await res.json();
+        if (data.status !== "syncing") {
+          streamActive = false;
+          clearInterval(fallbackPoll);
+          if (data.status === "done") {
+            setState({ status: "done" });
+            setTimeout(() => setState({ status: "idle" }), 3000);
+          } else if (data.status === "error") {
+            setState({ status: "error", message: data.error_message || "Erro" });
           }
         }
       } catch {
-        // continue polling
+        // continue polling on network errors
       }
     }, 2000);
 
