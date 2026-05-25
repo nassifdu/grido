@@ -61,6 +61,20 @@ export default function CatalogView() {
   // cor + sizes + total
   const colSpan = allSizes.length + 2;
 
+  // Global totals across all loaded pivots
+  const globalTotals = useMemo(() => {
+    const bySize: Record<string, number> = {};
+    let grand = 0;
+    for (const [, state] of pivots) {
+      if (!state || state === "loading" || state === "error") continue;
+      grand += state.grandTotal;
+      for (const s of allSizes) {
+        bySize[s] = (bySize[s] ?? 0) + (state.totals[s] ?? 0);
+      }
+    }
+    return { bySize, grand };
+  }, [pivots, allSizes]);
+
   // ── search ──────────────────────────────────────────────────────────────────
 
   const doSearch = useCallback(async (q: string) => {
@@ -355,6 +369,21 @@ export default function CatalogView() {
                     );
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-zinc-300 bg-zinc-100">
+                    <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                      Total global
+                    </td>
+                    {allSizes.map((s) => (
+                      <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums">
+                        {globalTotals.bySize[s] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums">
+                      {globalTotals.grand}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
