@@ -1,23 +1,65 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { Fragment, useState, useCallback, useRef, useMemo } from "react";
 import type { ProductSummary, ProductPivot } from "@/lib/catalog";
-import PivotTable from "./PivotTable";
 
 type PivotState = ProductPivot | "loading" | "error";
+
+// Mirror of lib/catalog.ts sortSizes for client-side column ordering
+const LETTER_SIZES = [
+  "RN", "PP", "P", "M", "G", "GG", "GGG", "XGG", "XG",
+  "EG", "EGG", "XS", "S", "L", "XL", "XXL", "XXXL",
+];
+const LETTER_ORDER = new Map(LETTER_SIZES.map((s, i) => [s, i]));
+
+function sortSizes(sizes: string[]): string[] {
+  const allNumeric = sizes.every((s) => /^\d+$/.test(s));
+  if (allNumeric) return [...sizes].sort((a, b) => +a - +b);
+  return [...sizes].sort((a, b) => {
+    const ai = LETTER_ORDER.get(a) ?? 999;
+    const bi = LETTER_ORDER.get(b) ?? 999;
+    return ai !== bi ? ai - bi : a.localeCompare(b, "pt-BR");
+  });
+}
+
+function stockClass(val: number): string {
+  if (val === 0) return "text-zinc-300";
+  if (val <= 2) return "text-amber-500 font-semibold";
+  if (val >= 10) return "text-emerald-700 font-medium";
+  return "text-zinc-700";
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
 
 export default function CatalogView() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductSummary[]>([]);
-  const [widgets, setWidgets] = useState<ProductSummary[]>([]);
+  const [selected, setSelected] = useState<ProductSummary[]>([]);
   const [pivots, setPivots] = useState<Map<string, PivotState>>(new Map());
   const [isSearching, setIsSearching] = useState(false);
 
-  // drag state
-  const [dragging, setDragging] = useState<number | null>(null);
-  const [dragOver, setDragOver] = useState<{ idx: number; before: boolean } | null>(null);
-
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Union of all sizes from every loaded pivot, sorted
+  const allSizes = useMemo(() => {
+    const sizeSet = new Set<string>();
+    for (const [, state] of pivots) {
+      if (state && state !== "loading" && state !== "error") {
+        for (const s of state.sizes) sizeSet.add(s);
+      }
+    }
+    return sortSizes([...sizeSet]);
+  }, [pivots]);
+
+  // cor + sizes + total
+  const colSpan = allSizes.length + 2;
 
   // ── search ──────────────────────────────────────────────────────────────────
 
@@ -41,16 +83,15 @@ export default function CatalogView() {
     timer.current = setTimeout(() => doSearch(val), 280);
   };
 
-  // ── widget toggle ────────────────────────────────────────────────────────────
+  // ── toggle product in/out of table ──────────────────────────────────────────
 
-  const toggleWidget = async (product: ProductSummary) => {
-    const selected = widgets.some((w) => w.key === product.key);
-    if (selected) {
-      setWidgets((prev) => prev.filter((w) => w.key !== product.key));
+  const toggleProduct = async (product: ProductSummary) => {
+    if (selected.some((p) => p.key === product.key)) {
+      setSelected((prev) => prev.filter((p) => p.key !== product.key));
       setPivots((prev) => { const n = new Map(prev); n.delete(product.key); return n; });
       return;
     }
-    setWidgets((prev) => [...prev, product]);
+    setSelected((prev) => [...prev, product]);
     setPivots((prev) => new Map(prev).set(product.key, "loading"));
     try {
       const res = await fetch(`/api/catalog/${product.groupId}`);
@@ -62,147 +103,15 @@ export default function CatalogView() {
     }
   };
 
-  // ── drag & drop ──────────────────────────────────────────────────────────────
-
-  const handleDragStart = (e: React.DragEvent, idx: number) => {
-    setDragging(idx);
-    e.dataTransfer.effectAllowed = "move";
-  };
-
-  const handleDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const rect = e.currentTarget.getBoundingClientRect();
-    const before = e.clientY < rect.top + rect.height / 2;
-    setDragOver((prev) =>
-      prev?.idx === idx && prev?.before === before ? prev : { idx, before }
-    );
-  };
-
-  const handleDrop = (e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    if (dragging === null) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const before = e.clientY < rect.top + rect.height / 2;
-    let insertAt = before ? idx : idx + 1;
-    if (dragging < insertAt) insertAt--;
-    if (insertAt !== dragging) {
-      setWidgets((prev) => {
-        const next = [...prev];
-        const [item] = next.splice(dragging, 1);
-        next.splice(insertAt, 0, item);
-        return next;
-      });
-    }
-    setDragging(null);
-    setDragOver(null);
-  };
-
-  const handleDragEnd = () => {
-    setDragging(null);
-    setDragOver(null);
-  };
-
-  // ── widget card ──────────────────────────────────────────────────────────────
-
-  const renderWidget = (w: ProductSummary, flatIdx: number) => {
-    const state = pivots.get(w.key);
-    const pivot = state && state !== "loading" && state !== "error" ? state : null;
-    const isDragging = dragging === flatIdx;
-    const isOver = dragOver?.idx === flatIdx;
-
-    return (
-      <div key={w.key} className="relative select-none">
-        {/* drop indicator: above */}
-        {isOver && dragOver?.before && (
-          <div className="absolute -top-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
-        )}
-
-        <div
-          draggable
-          onDragStart={(e) => handleDragStart(e, flatIdx)}
-          onDragOver={(e) => handleDragOver(e, flatIdx)}
-          onDrop={(e) => handleDrop(e, flatIdx)}
-          onDragEnd={handleDragEnd}
-          className={`rounded-xl border border-zinc-200 bg-white shadow-sm transition-opacity duration-150 ${
-            isDragging ? "opacity-30" : "opacity-100"
-          }`}
-        >
-          {/* header */}
-          <div className="flex items-start gap-2 border-b border-zinc-100 px-3 py-4">
-            {/* grip handle */}
-            <div className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-zinc-300 hover:text-zinc-400 transition-colors">
-              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="5"  cy="3.5" r="1.5" />
-                <circle cx="5"  cy="8"   r="1.5" />
-                <circle cx="5"  cy="12.5" r="1.5" />
-                <circle cx="11" cy="3.5" r="1.5" />
-                <circle cx="11" cy="8"   r="1.5" />
-                <circle cx="11" cy="12.5" r="1.5" />
-              </svg>
-            </div>
-
-            <div className="flex-1 min-w-0 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-900 leading-snug">{w.nome}</h2>
-                {w.marca && <p className="text-xs text-zinc-400 mt-0.5">{w.marca}</p>}
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                {pivot && (
-                  <div className="text-right">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">Estoque</p>
-                    <p className="text-xl font-bold text-zinc-900 tabular-nums leading-tight">{pivot.grandTotal}</p>
-                  </div>
-                )}
-                <button
-                  onClick={() => toggleWidget(w)}
-                  aria-label="Fechar"
-                  className="rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-100 hover:text-zinc-500 transition-colors"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* body */}
-          {!state || state === "loading" ? (
-            <div className="flex items-center justify-center py-14">
-              <svg className="h-5 w-5 animate-spin text-zinc-300" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            </div>
-          ) : state === "error" ? (
-            <div className="flex items-center justify-center py-14 text-xs text-zinc-400">
-              Erro ao carregar dados
-            </div>
-          ) : (
-            <PivotTable pivot={state} />
-          )}
-        </div>
-
-        {/* drop indicator: below */}
-        {isOver && !dragOver?.before && (
-          <div className="absolute -bottom-[11px] inset-x-3 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" />
-        )}
-      </div>
-    );
-  };
-
-  // even flat indices → left column, odd → right column
-  const leftWidgets  = widgets.filter((_, i) => i % 2 === 0);
-  const rightWidgets = widgets.filter((_, i) => i % 2 === 1);
-
   // ── render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* ── Sidebar ───────────────────────────────────────────────────────── */}
+
+      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
       <aside className="w-72 shrink-0 flex flex-col border-r border-zinc-200 bg-white overflow-hidden">
-        {/* search */}
+
+        {/* search input */}
         <div className="shrink-0 p-3 border-b border-zinc-100">
           <div className="relative">
             <svg
@@ -220,18 +129,12 @@ export default function CatalogView() {
               className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-9 pr-8 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100 transition-all"
             />
             {isSearching && (
-              <svg
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-zinc-300"
-                viewBox="0 0 24 24" fill="none"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
+              <Spinner className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-300" />
             )}
           </div>
         </div>
 
-        {/* results */}
+        {/* results list */}
         <div className="flex-1 overflow-y-auto">
           {!query && (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center select-none">
@@ -252,28 +155,31 @@ export default function CatalogView() {
           {results.length > 0 && (
             <ul className="divide-y divide-zinc-50 py-1">
               {results.map((p) => {
-                const selected = widgets.some((w) => w.key === p.key);
+                const isSelected = selected.some((w) => w.key === p.key);
                 return (
                   <li key={p.key}>
                     <button
-                      onClick={() => toggleWidget(p)}
-                      className={`w-full px-3 py-2.5 text-left flex items-center gap-2.5 transition-colors group ${
-                        selected ? "bg-zinc-50" : "hover:bg-zinc-50/80"
+                      onClick={() => toggleProduct(p)}
+                      className={`w-full px-3 py-2.5 text-left flex items-start gap-2.5 transition-colors group ${
+                        isSelected ? "bg-zinc-50" : "hover:bg-zinc-50/80"
                       }`}
                     >
-                      <span className={`shrink-0 flex h-4 w-4 items-center justify-center rounded border transition-colors ${
-                        selected
+                      <span className={`mt-0.5 shrink-0 flex h-4 w-4 items-center justify-center rounded border transition-colors ${
+                        isSelected
                           ? "border-zinc-900 bg-zinc-900"
                           : "border-zinc-300 group-hover:border-zinc-400"
                       }`}>
-                        {selected && (
+                        {isSelected && (
                           <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
                         )}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-medium text-zinc-900 leading-snug">{p.nome}</p>
+                        {/* break-words so long names wrap instead of truncating */}
+                        <p className="text-sm font-medium text-zinc-900 leading-snug break-words whitespace-normal">
+                          {p.nome}
+                        </p>
                         <p className="text-xs text-zinc-400 mt-0.5 tabular-nums">
                           {p.totalEstoque} un.
                           {p.colorCount > 0 && (
@@ -292,19 +198,19 @@ export default function CatalogView() {
           )}
         </div>
 
-        {/* footer */}
-        {widgets.length > 0 && (
+        {/* footer count */}
+        {selected.length > 0 && (
           <div className="shrink-0 border-t border-zinc-100 px-3 py-2 bg-zinc-50">
             <p className="text-xs text-zinc-400">
-              {widgets.length === 1 ? "1 produto selecionado" : `${widgets.length} produtos selecionados`}
+              {selected.length === 1 ? "1 produto selecionado" : `${selected.length} produtos selecionados`}
             </p>
           </div>
         )}
       </aside>
 
-      {/* ── Main content ──────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto bg-zinc-50">
-        {widgets.length === 0 ? (
+      {/* ── Main — unified table ─────────────────────────────────────────────── */}
+      <main className="flex-1 overflow-auto bg-zinc-50">
+        {selected.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full select-none">
             <svg className="mb-4 h-12 w-12 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18M10 3v18M14 3v18" />
@@ -312,18 +218,149 @@ export default function CatalogView() {
             <p className="text-sm text-zinc-400">Selecione produtos na barra lateral</p>
           </div>
         ) : (
-          <div className="p-6 flex gap-5 items-start">
-            {/* left column: items at even flat indices (0, 2, 4…) */}
-            <div className="flex-1 flex flex-col gap-5 min-w-0">
-              {leftWidgets.map((w, colIdx) => renderWidget(w, colIdx * 2))}
-            </div>
-            {/* right column: items at odd flat indices (1, 3, 5…) */}
-            <div className="flex-1 flex flex-col gap-5 min-w-0">
-              {rightWidgets.map((w, colIdx) => renderWidget(w, colIdx * 2 + 1))}
+          <div className="p-6">
+            <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b-2 border-zinc-200 bg-zinc-50">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap">
+                      Cor
+                    </th>
+                    {allSizes.map((s) => (
+                      <th
+                        key={s}
+                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap min-w-[3.5rem]"
+                      >
+                        {s}
+                      </th>
+                    ))}
+                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.map((product, productIdx) => {
+                    const state = pivots.get(product.key);
+                    const pivot = state && state !== "loading" && state !== "error" ? state : null;
+
+                    return (
+                      <Fragment key={product.key}>
+
+                        {/* product group header */}
+                        <tr className={`${productIdx > 0 ? "border-t-2 border-zinc-200" : ""} bg-zinc-50`}>
+                          <td colSpan={colSpan} className="px-5 py-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="font-semibold text-zinc-800 leading-snug">
+                                  {product.nome}
+                                </span>
+                                {pivot && (
+                                  <span className="flex-none text-xs text-zinc-400 tabular-nums">
+                                    {pivot.grandTotal} un.
+                                  </span>
+                                )}
+                                {state === "loading" && (
+                                  <Spinner className="h-3.5 w-3.5 text-zinc-400" />
+                                )}
+                              </div>
+                              <button
+                                onClick={() => toggleProduct(product)}
+                                aria-label="Remover produto"
+                                className="flex-none rounded-md p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200 transition-colors"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* loading */}
+                        {state === "loading" && (
+                          <tr>
+                            <td colSpan={colSpan} className="py-10 text-center">
+                              <Spinner className="h-5 w-5 text-zinc-300 mx-auto" />
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* error */}
+                        {state === "error" && (
+                          <tr>
+                            <td colSpan={colSpan} className="py-8 text-center text-xs text-zinc-400">
+                              Erro ao carregar dados
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* childless product (no variants) */}
+                        {pivot?.isChildless && (
+                          <tr className="hover:bg-zinc-50/70 transition-colors">
+                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic">
+                              {pivot.childlessCodigo ?? "sem variações"}
+                            </td>
+                            {allSizes.map((s) => (
+                              <td key={s} className="px-3 py-2.5 text-center text-zinc-200">·</td>
+                            ))}
+                            <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
+                              {pivot.grandTotal}
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* color rows */}
+                        {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
+                          <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors">
+                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap">
+                              {row.cor ?? (
+                                <span className="text-zinc-400 italic text-xs">sem cor</span>
+                              )}
+                            </td>
+                            {allSizes.map((s) => {
+                              const val = row.cells[s]?.estoque ?? 0;
+                              return (
+                                <td key={s} className="px-3 py-2.5 text-center tabular-nums">
+                                  <span className={stockClass(val)}>
+                                    {val === 0 ? <span className="opacity-30">·</span> : val}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
+                              {row.total}
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* per-product subtotal */}
+                        {pivot && !pivot.isChildless && (
+                          <tr className="border-t border-zinc-100 bg-zinc-50/60">
+                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                              Total
+                            </td>
+                            {allSizes.map((s) => (
+                              <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums">
+                                {pivot.totals[s] ?? 0}
+                              </td>
+                            ))}
+                            <td className="px-5 py-2 text-center text-sm font-bold text-zinc-900 tabular-nums">
+                              {pivot.grandTotal}
+                            </td>
+                          </tr>
+                        )}
+
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </main>
+
     </div>
   );
 }

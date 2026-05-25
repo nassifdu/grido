@@ -55,6 +55,36 @@ function sortSizes(sizes: string[]): string[] {
   });
 }
 
+// ── size normalization ─────────────────────────────────────────────────────────
+//
+// Multiple size standards all mean the same physical size, e.g.:
+//   "36"  "36 BR"  "36BR"  "36 Br"
+//   "25x34 USA/ 36 BR"  "25X34 USA/ 36 BR"  "25 Usa/ 36 Br"
+//   "25USA/ 36BR"  "25USA36BR"  "25-36"  "25/36"
+//
+// Strategy: extract the number before "BR" if present; otherwise for "N-M" /
+// "N/M" pairs take the second number (the BR side); plain numbers pass through;
+// letter sizes (PP, M, GG…) come back uppercased.
+
+export function normalizeSize(raw: string): string {
+  const s = raw.trim();
+
+  // Number followed by "BR" keyword (any case / surrounding whitespace)
+  const brMatch = s.match(/(\d+)\s*BR/i);
+  if (brMatch) return brMatch[1];
+
+  // Dash- or slash-separated pair like "25-36" or "25/36" → take second number
+  const pairMatch = s.match(/^\s*\d+\s*[-/]\s*(\d+)\s*$/);
+  if (pairMatch) return pairMatch[1];
+
+  // Plain integer
+  const numMatch = s.match(/^\s*(\d+)\s*$/);
+  if (numMatch) return numMatch[1];
+
+  // Letter size or unknown format — uppercase and trim
+  return s.toUpperCase();
+}
+
 // ── variacao_nome parsing ──────────────────────────────────────────────────────
 
 function parseVariacao(vn: string | null): { cor: string | null; tamanho: string | null } {
@@ -66,9 +96,9 @@ function parseVariacao(vn: string | null): { cor: string | null; tamanho: string
     const m = part.match(/^(Cor|Tamanho):(.+)$/i);
     if (!m) continue;
     if (m[1].toLowerCase() === "cor") cor = m[2].trim();
-    else tamanho = m[2].trim().toUpperCase();
+    else tamanho = normalizeSize(m[2].trim());
   }
-  if (!cor && !tamanho) tamanho = vn.trim();
+  if (!cor && !tamanho) tamanho = normalizeSize(vn.trim());
   return { cor, tamanho };
 }
 
@@ -118,9 +148,15 @@ export async function searchProducts(
     a.nome.localeCompare(b.nome, "pt-BR")
   );
 
+  // Token search: every whitespace-separated token must appear in the name
+  const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+
   const results: ProductSummary[] = [];
   for (const g of sorted) {
-    if (q && !g.nome.toLowerCase().includes(q)) continue;
+    if (tokens.length > 0) {
+      const name = g.nome.toLowerCase();
+      if (tokens.some((t) => !name.includes(t))) continue;
+    }
     results.push({
       key: g.key,
       groupId: g.groupId,
