@@ -1,4 +1,5 @@
 import { buildTransformed, TransformedItem } from "./transform";
+import { getSupabase } from "./supabase";
 
 // ── public types ───────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export interface ProductPivot {
   grandTotal: number;
   isChildless: boolean;
   childlessCodigo?: string | null;
+  parentCodigo: string | null;
 }
 
 // ── size sorting ───────────────────────────────────────────────────────────────
@@ -186,6 +188,16 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
   const key = group[0].idProdutoPai != null ? `p:${gId}` : `s:${gId}`;
   const isChildless = group.length === 1 && group[0].idProdutoPai === null;
 
+  // Fetch parent product's codigo from bling_produtos (cached via buildTransformed is server-only)
+  const { data: parentRow } = await getSupabase()
+    .from("bling_produtos")
+    .select("data")
+    .eq("id", gId)
+    .maybeSingle();
+  const rawParentData = parentRow?.data as Record<string, unknown> | null;
+  const parentCodigo: string | null =
+    typeof rawParentData?.codigo === "string" ? rawParentData.codigo : null;
+
   if (isChildless) {
     return {
       key,
@@ -198,6 +210,7 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
       grandTotal: group[0].estoque,
       isChildless: true,
       childlessCodigo: group[0].codigo,
+      parentCodigo,
     };
   }
 
@@ -241,5 +254,6 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
     totals,
     grandTotal: rows.reduce((sum, r) => sum + r.total, 0),
     isChildless: false,
+    parentCodigo,
   };
 }

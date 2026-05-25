@@ -45,6 +45,7 @@ export default function CatalogView() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSubtotals, setShowSubtotals] = useState(true);
   const [showZeros, setShowZeros] = useState(true);
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
   const [starredCells, setStarredCells] = useState<Set<string>>(new Set());
   const [cellAnnotations, setCellAnnotations] = useState<Map<string, number>>(new Map());
   const [annotatingCell, setAnnotatingCell] = useState<string | null>(null);
@@ -146,6 +147,57 @@ export default function CatalogView() {
       return next;
     });
     setAnnotatingCell(null);
+  }
+
+  // ── cell renderer (shared by grouped + flat views) ───────────────────────────
+
+  function renderDataCell(s: string, cellKey: string, val: number) {
+    const isStarred = starredCells.has(cellKey);
+    const annotation = cellAnnotations.get(cellKey);
+    const isAnnotating = annotatingCell === cellKey;
+    return (
+      <td key={s} className={`relative px-3 py-2.5 text-center tabular-nums border-r border-zinc-100 group${isStarred ? " bg-amber-50" : ""}`}>
+        <button onClick={(e) => { e.stopPropagation(); toggleStar(cellKey); }} title="Destacar"
+          className={`absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
+        {annotation !== undefined && !isAnnotating ? (
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }} title="Editar anotação"
+            className="absolute top-0 right-0.5 text-[10px] font-bold leading-none text-amber-500 hover:text-amber-600">
+            +{annotation}
+          </button>
+        ) : !isAnnotating && (
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }} title="Anotar"
+            className="absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
+            </svg>
+          </button>
+        )}
+        {isAnnotating && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
+            <input
+              ref={(el) => { if (el) { el.focus(); el.select(); } }}
+              type="number" min="1" value={annotationInput}
+              onChange={(e) => setAnnotationInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { skipBlurRef.current = true; commitAnnotation(cellKey, annotationInput); }
+                else if (e.key === "Escape") { skipBlurRef.current = true; setAnnotatingCell(null); }
+              }}
+              onBlur={() => { if (skipBlurRef.current) { skipBlurRef.current = false; return; } commitAnnotation(cellKey, annotationInput); }}
+              className="w-10 py-0.5 text-center text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+            />
+          </div>
+        )}
+        {!isAnnotating && (
+          val === 0
+            ? (showZeros ? <span className="text-red-400">0</span> : <span className="opacity-30">·</span>)
+            : <span className={stockClass(val)}>{val}</span>
+        )}
+      </td>
+    );
   }
 
   // ── render ───────────────────────────────────────────────────────────────────
@@ -268,6 +320,29 @@ export default function CatalogView() {
           <>
             {/* ── Controls bar ──────────────────────────────────────────────── */}
             <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-6">
+
+              {/* View mode toggle */}
+              <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
+                <button
+                  onClick={() => setViewMode("grouped")}
+                  title="Agrupado por produto"
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${viewMode === "grouped" ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 9h18M3 13h18M3 17h18" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 5v12" strokeWidth={2.5} />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setViewMode("flat")}
+                  title="Lista plana"
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${viewMode === "flat" ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                </button>
+              </div>
               {/* Subtotais */}
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <svg className="h-3.5 w-3.5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -308,7 +383,7 @@ export default function CatalogView() {
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
-                      Cor
+                      {viewMode === "flat" ? "Variação" : "Cor"}
                     </th>
                     {allSizes.map((s) => (
                       <th
@@ -324,191 +399,109 @@ export default function CatalogView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selected.map((product, productIdx) => {
-                    const state = pivots.get(product.key);
-                    const pivot = state && state !== "loading" && state !== "error" ? state : null;
+                  {viewMode === "grouped"
+                    ? selected.map((product, productIdx) => {
+                        const state = pivots.get(product.key);
+                        const pivot = state && state !== "loading" && state !== "error" ? state : null;
+                        return (
+                          <Fragment key={product.key}>
 
-                    return (
-                      <Fragment key={product.key}>
-
-                        {/* product group header */}
-                        <tr className={`${productIdx > 0 ? "border-t-2 border-zinc-200" : ""} bg-zinc-50`}>
-                          <td colSpan={colSpan} className="px-5 py-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <span className="font-semibold text-zinc-800 leading-snug">
-                                  {product.nome}
-                                </span>
-                                {pivot && (
-                                  <span className="flex-none text-xs text-zinc-400 tabular-nums">
-                                    {pivot.grandTotal} un.
-                                  </span>
-                                )}
-                                {state === "loading" && (
-                                  <Spinner className="h-3.5 w-3.5 text-zinc-400" />
-                                )}
-                              </div>
-                              <button
-                                onClick={() => toggleProduct(product)}
-                                aria-label="Remover produto"
-                                className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* loading */}
-                        {state === "loading" && (
-                          <tr>
-                            <td colSpan={colSpan} className="py-10 text-center">
-                              <Spinner className="h-5 w-5 text-zinc-300 mx-auto" />
-                            </td>
-                          </tr>
-                        )}
-
-                        {/* error */}
-                        {state === "error" && (
-                          <tr>
-                            <td colSpan={colSpan} className="py-8 text-center text-xs text-zinc-400">
-                              Erro ao carregar dados
-                            </td>
-                          </tr>
-                        )}
-
-                        {/* childless product (no variants) */}
-                        {pivot?.isChildless && (
-                          <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic border-r border-zinc-100">
-                              {pivot.childlessCodigo ?? "sem variações"}
-                            </td>
-                            {allSizes.map((s) => (
-                              <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>
-                            ))}
-                            <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
-                              {pivot.grandTotal}
-                            </td>
-                          </tr>
-                        )}
-
-                        {/* color rows */}
-                        {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
-                          <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
-                              {row.cor ?? (
-                                <span className="text-zinc-400 italic text-xs">sem cor</span>
-                              )}
-                            </td>
-                            {allSizes.map((s) => {
-                              const val = row.cells[s]?.estoque ?? 0;
-                              const cellKey = `${product.key}|||${row.cor ?? ""}|||${s}`;
-                              const isStarred = starredCells.has(cellKey);
-                              const annotation = cellAnnotations.get(cellKey);
-                              const isAnnotating = annotatingCell === cellKey;
-                              return (
-                                <td
-                                  key={s}
-                                  className={`relative px-3 py-2.5 text-center tabular-nums border-r border-zinc-100 group${isStarred ? " bg-amber-50" : ""}`}
-                                >
-                                  {/* star button — top-left */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); toggleStar(cellKey); }}
-                                    title="Destacar"
-                                    className={`absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-                                  >
-                                    <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
-                                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                            {/* product group header */}
+                            <tr className={`${productIdx > 0 ? "border-t-2 border-zinc-200" : ""} bg-zinc-50`}>
+                              <td colSpan={colSpan} className="px-5 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <span className="font-semibold text-zinc-800 leading-snug">{product.nome}</span>
+                                    {pivot && <span className="flex-none text-xs text-zinc-400 tabular-nums">{pivot.grandTotal} un.</span>}
+                                    {state === "loading" && <Spinner className="h-3.5 w-3.5 text-zinc-400" />}
+                                  </div>
+                                  <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
+                                    className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                   </button>
-
-                                  {/* annotation "+N" — top-right, clickable to edit; hides plus button */}
-                                  {annotation !== undefined && !isAnnotating ? (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
-                                      title="Editar anotação"
-                                      className="absolute top-0 right-0.5 text-[10px] font-bold leading-none text-amber-500 hover:text-amber-600"
-                                    >
-                                      +{annotation}
-                                    </button>
-                                  ) : (
-                                    /* plus button — top-right, hover-only, shown only when no annotation */
-                                    !isAnnotating && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
-                                        title="Anotar"
-                                        className="absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                      >
-                                        <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
-                                        </svg>
-                                      </button>
-                                    )
-                                  )}
-
-                                  {/* annotation input overlay */}
-                                  {isAnnotating && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
-                                      <input
-                                        ref={(el) => { if (el) { el.focus(); el.select(); } }}
-                                        type="number"
-                                        min="1"
-                                        value={annotationInput}
-                                        onChange={(e) => setAnnotationInput(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") { skipBlurRef.current = true; commitAnnotation(cellKey, annotationInput); }
-                                          else if (e.key === "Escape") { skipBlurRef.current = true; setAnnotatingCell(null); }
-                                        }}
-                                        onBlur={() => {
-                                          if (skipBlurRef.current) { skipBlurRef.current = false; return; }
-                                          commitAnnotation(cellKey, annotationInput);
-                                        }}
-                                        className="w-10 py-0.5 text-center text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
-                                      />
-                                    </div>
-                                  )}
-
-                                  {/* value */}
-                                  {!isAnnotating && (
-                                    val === 0 ? (
-                                      showZeros
-                                        ? <span className="text-red-400">0</span>
-                                        : <span className="opacity-30">·</span>
-                                    ) : (
-                                      <span className={stockClass(val)}>{val}</span>
-                                    )
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
-                              {row.total}
-                            </td>
-                          </tr>
-                        ))}
-
-                        {/* per-product subtotal */}
-                        {pivot && !pivot.isChildless && showSubtotals && (
-                          <tr className="border-t border-zinc-200 bg-zinc-50/60">
-                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 border-r border-zinc-100">
-                              Subtotal
-                            </td>
-                            {allSizes.map((s) => (
-                              <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
-                                {pivot.totals[s] ?? 0}
+                                </div>
                               </td>
-                            ))}
-                            <td className="px-5 py-2 text-center text-sm font-bold text-zinc-900 tabular-nums">
-                              {pivot.grandTotal}
-                            </td>
-                          </tr>
-                        )}
+                            </tr>
 
-                      </Fragment>
-                    );
-                  })}
+                            {state === "loading" && (
+                              <tr><td colSpan={colSpan} className="py-10 text-center"><Spinner className="h-5 w-5 text-zinc-300 mx-auto" /></td></tr>
+                            )}
+                            {state === "error" && (
+                              <tr><td colSpan={colSpan} className="py-8 text-center text-xs text-zinc-400">Erro ao carregar dados</td></tr>
+                            )}
+
+                            {pivot?.isChildless && (
+                              <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                                <td className="px-5 py-2.5 text-xs text-zinc-400 italic border-r border-zinc-100">{pivot.childlessCodigo ?? "sem variações"}</td>
+                                {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
+                                <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
+                              </tr>
+                            )}
+
+                            {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
+                              <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                  {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                </td>
+                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
+                                <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
+                              </tr>
+                            ))}
+
+                            {pivot && !pivot.isChildless && showSubtotals && (
+                              <tr className="border-t border-zinc-200 bg-zinc-50/60">
+                                <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 border-r border-zinc-100">Subtotal</td>
+                                {allSizes.map((s) => (
+                                  <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">{pivot.totals[s] ?? 0}</td>
+                                ))}
+                                <td className="px-5 py-2 text-center text-sm font-bold text-zinc-900 tabular-nums">{pivot.grandTotal}</td>
+                              </tr>
+                            )}
+
+                          </Fragment>
+                        );
+                      })
+                    : selected.map((product) => {
+                        const state = pivots.get(product.key);
+                        const pivot = state && state !== "loading" && state !== "error" ? state : null;
+                        return (
+                          <Fragment key={product.key}>
+
+                            {state === "loading" && (
+                              <tr><td colSpan={colSpan} className="py-4 text-center"><Spinner className="h-4 w-4 text-zinc-300 mx-auto" /></td></tr>
+                            )}
+                            {state === "error" && (
+                              <tr><td colSpan={colSpan} className="py-4 text-center text-xs text-zinc-400">Erro ao carregar {product.nome}</td></tr>
+                            )}
+
+                            {pivot?.isChildless && (
+                              <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                  {pivot.parentCodigo && <code className="mr-2 font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
+                                  <span className="text-zinc-400 italic text-xs">{pivot.childlessCodigo ?? "sem variações"}</span>
+                                </td>
+                                {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
+                                <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
+                              </tr>
+                            )}
+
+                            {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
+                              <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                  {pivot.parentCodigo && <code className="mr-2 font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
+                                  {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                </td>
+                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
+                                <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
+                              </tr>
+                            ))}
+
+                          </Fragment>
+                        );
+                      })
+                  }
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-zinc-300 bg-zinc-100">
