@@ -236,21 +236,21 @@ export default function CatalogView() {
         ) : (
           <div className="p-6">
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-              <table className="w-auto border-collapse text-sm">
+              <table className="w-full table-fixed border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap w-px border-r border-zinc-200">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
                       Cor
                     </th>
                     {allSizes.map((s) => (
                       <th
                         key={s}
-                        className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap min-w-[2rem] border-r border-zinc-200"
+                        className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap w-12 border-r border-zinc-200"
                       >
                         {s}
                       </th>
                     ))}
-                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap w-20">
                       Total
                     </th>
                   </tr>
@@ -314,7 +314,7 @@ export default function CatalogView() {
                         {/* childless product (no variants) */}
                         {pivot?.isChildless && (
                           <tr className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic w-px border-r border-zinc-100">
+                            <td className="px-5 py-2.5 text-xs text-zinc-400 italic border-r border-zinc-100">
                               {pivot.childlessCodigo ?? "sem variações"}
                             </td>
                             {allSizes.map((s) => (
@@ -329,7 +329,7 @@ export default function CatalogView() {
                         {/* color rows */}
                         {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
                           <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap w-px border-r border-zinc-100">
+                            <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
                               {row.cor ?? (
                                 <span className="text-zinc-400 italic text-xs">sem cor</span>
                               )}
@@ -353,7 +353,7 @@ export default function CatalogView() {
                         {/* per-product subtotal */}
                         {pivot && !pivot.isChildless && (
                           <tr className="border-t border-zinc-200 bg-zinc-50/60">
-                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 w-px border-r border-zinc-100">
+                            <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 border-r border-zinc-100">
                               Total
                             </td>
                             {allSizes.map((s) => (
