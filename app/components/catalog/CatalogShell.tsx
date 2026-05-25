@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import CatalogView from "./CatalogView";
-import SyncButton from "./SyncButton";
+import SyncLastTime from "./SyncLastTime";
 
 export default function CatalogShell() {
   const [showSubtotals, setShowSubtotals] = useState(true);
@@ -43,7 +43,7 @@ export default function CatalogShell() {
                 />
               </button>
             </div>
-            <SyncButton />
+            <SyncLastTime />
             <form action="/api/auth/logout" method="POST">
               <button
                 type="submit"
