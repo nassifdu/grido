@@ -4,6 +4,8 @@ import { blingFetch } from "@/lib/bling";
 import { getSupabase } from "@/lib/supabase";
 import { clearTransformCache } from "@/lib/transform";
 
+export const maxDuration = 300; // 300s max on Vercel Pro; raise to 800 on Enterprise
+
 const PRODUTOS_PAGE = 100;
 const UPSERT_BATCH = 500;
 const DELAY_MS = 400; // stay under Bling's 3 req/sec limit
