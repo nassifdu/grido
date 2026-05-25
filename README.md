@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Grido
+
+A Next.js dashboard for analyzing product stock from Bling ERP. Displays inventory as interactive pivot tables (color × size grids) with real-time sync from Bling's catalog.
+
+## Features
+
+- **Product Search:** Search Bling products and view stock availability
+- **Pivot Tables:** Analyze stock as color × size grids with real-time subtotals
+- **Catalog Sync:** Stream product data from Bling to Supabase cache with progress tracking
+- **Multi-widget:** Pin multiple product widgets simultaneously on the dashboard
+- **Authentication:** Bling OAuth with encrypted token storage
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- A Bling ERP account with OAuth credentials
+- Supabase project (cloud or local CLI)
+
+### Setup
+
+1. **Clone and install:**
+   ```bash
+   npm install
+   ```
+
+2. **Environment variables:** Copy required vars into `.env.local`:
+   ```
+   BLING_CLIENT_ID=<your-client-id>
+   BLING_CLIENT_SECRET=<your-client-secret>
+   BLING_REDIRECT_URI=http://localhost:3000/api/auth/callback
+   SUPABASE_URL=<your-supabase-url>
+   SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+   SESSION_SECRET=<random-secret>
+   TOKEN_ENCRYPTION_KEY=<64-char-hex-key>
+   ```
+
+3. **Database migrations:** Run SQL migrations in your Supabase project:
+   ```bash
+   supabase/migrations/001_bling_tokens.sql
+   supabase/migrations/002_catalog_cache.sql
+   ```
+
+4. **Seed local data (optional):**
+   ```bash
+   npx tsx scripts/seed-catalog.ts
+   ```
+
+5. **Start dev server:**
+   ```bash
+   npm run dev
+   ```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run dev      # Start development server
+npm run build    # Production build (includes type check)
+npm run start    # Serve production build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `app/api/` — Next.js API routes (auth, catalog, sync)
+- `app/dashboard/` — Authenticated pages
+- `lib/` — Shared utilities (Bling client, catalog queries, auth, crypto)
+- `supabase/` — Database migrations
+- `data/` — Local product snapshots for seeding
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See [CLAUDE.md](./CLAUDE.md) for detailed architecture and development notes.
 
-## Learn More
+## License
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Private project.
