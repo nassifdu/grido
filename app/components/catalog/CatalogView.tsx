@@ -236,7 +236,7 @@ export default function CatalogView() {
         ) : (
           <div className="p-6">
             <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-              <table className="w-full table-fixed border-collapse text-sm">
+              <table className="mx-auto border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
@@ -245,12 +245,12 @@ export default function CatalogView() {
                     {allSizes.map((s) => (
                       <th
                         key={s}
-                        className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap w-12 border-r border-zinc-200"
+                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200"
                       >
                         {s}
                       </th>
                     ))}
-                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap w-20">
+                    <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
                       Total
                     </th>
                   </tr>
@@ -318,7 +318,7 @@ export default function CatalogView() {
                               {pivot.childlessCodigo ?? "sem variações"}
                             </td>
                             {allSizes.map((s) => (
-                              <td key={s} className="px-2 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>
+                              <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>
                             ))}
                             <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
                               {pivot.grandTotal}
@@ -337,7 +337,7 @@ export default function CatalogView() {
                             {allSizes.map((s) => {
                               const val = row.cells[s]?.estoque ?? 0;
                               return (
-                                <td key={s} className="px-2 py-2.5 text-center tabular-nums border-r border-zinc-100">
+                                <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
                                   <span className={stockClass(val)}>
                                     {val === 0 ? <span className="opacity-30">·</span> : val}
                                   </span>
@@ -357,7 +357,7 @@ export default function CatalogView() {
                               Total
                             </td>
                             {allSizes.map((s) => (
-                              <td key={s} className="px-2 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
+                              <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
                                 {pivot.totals[s] ?? 0}
                               </td>
                             ))}
