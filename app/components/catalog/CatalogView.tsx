@@ -424,23 +424,29 @@ export default function CatalogView() {
                                     </svg>
                                   </button>
 
-                                  {/* annotation "+N" — top-right, visible when set and not editing */}
-                                  {annotation !== undefined && !isAnnotating && (
-                                    <span className="absolute top-0 right-0.5 text-[8px] font-bold leading-none text-amber-500 pointer-events-none">
+                                  {/* annotation "+N" — top-right, clickable to edit; hides plus button */}
+                                  {annotation !== undefined && !isAnnotating ? (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
+                                      title="Editar anotação"
+                                      className="absolute top-0 right-0.5 text-[10px] font-bold leading-none text-amber-500 hover:text-amber-600"
+                                    >
                                       +{annotation}
-                                    </span>
+                                    </button>
+                                  ) : (
+                                    /* plus button — top-right, hover-only, shown only when no annotation */
+                                    !isAnnotating && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
+                                        title="Anotar"
+                                        className="absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
+                                        </svg>
+                                      </button>
+                                    )
                                   )}
-
-                                  {/* plus button — top-right, on hover (or always if annotation set) */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }}
-                                    title="Anotar"
-                                    className={`absolute top-0.5 right-0.5 rounded transition-opacity ${annotation !== undefined ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-                                  >
-                                    <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
-                                    </svg>
-                                  </button>
 
                                   {/* annotation input overlay */}
                                   {isAnnotating && (
