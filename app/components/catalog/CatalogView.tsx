@@ -273,8 +273,8 @@ export default function CatalogView() {
               </label>
             </div>
 
-            <div className="flex-1 overflow-auto p-6 flex justify-center">
-            <div className="w-fit rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+            <div className="flex-1 overflow-auto p-6">
+            <div className="w-fit mx-auto rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
               <table className="border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">

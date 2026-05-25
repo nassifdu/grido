@@ -44,12 +44,13 @@ export default function SyncControl() {
   const [state, setState] = useState<SyncState>({ status: "idle" });
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
-  async function fetchStatus(): Promise<ServerStatus | null> {
+  async function fetchStatus(): Promise<ServerStatus | null | "unauthorized"> {
     try {
       const res = await fetch("/api/catalog/sync/status");
+      if (res.status === 401) return "unauthorized";
       if (res.ok) return res.json();
     } catch {
-      // ignore
+      // transient network error
     }
     return null;
   }
@@ -57,7 +58,7 @@ export default function SyncControl() {
   // Initialize from server on mount
   useEffect(() => {
     fetchStatus().then((data) => {
-      if (!data) return;
+      if (!data || data === "unauthorized") return;
       setLastSyncAt(data.last_sync_at);
       if (data.status === "syncing") {
         const isStale = data.sync_started_at
@@ -76,6 +77,7 @@ export default function SyncControl() {
 
     const interval = setInterval(async () => {
       const data = await fetchStatus();
+      if (data === "unauthorized") { clearInterval(interval); setState({ status: "idle" }); return; }
       if (!data) return;
       if (data.status === "done" || data.status === "idle") {
         setLastSyncAt(data.last_sync_at);
@@ -115,6 +117,7 @@ export default function SyncControl() {
     const fallbackPoll = setInterval(async () => {
       if (!streamActive) return;
       const data = await fetchStatus();
+      if (data === "unauthorized") { streamActive = false; clearInterval(fallbackPoll); setState({ status: "idle" }); return; }
       if (!data) return;
       if (data.status !== "syncing") {
         streamActive = false;
@@ -158,7 +161,7 @@ export default function SyncControl() {
             streamActive = false;
             setState({ status: "done" });
             fetchStatus().then((d) => {
-              if (d) setLastSyncAt(d.last_sync_at);
+              if (d && d !== "unauthorized") setLastSyncAt(d.last_sync_at);
             });
             setTimeout(() => setState({ status: "idle" }), 3000);
           } else if (event.type === "error") {
