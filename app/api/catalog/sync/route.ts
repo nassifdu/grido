@@ -8,7 +8,7 @@ export const maxDuration = 300; // 300s max on Vercel Pro; raise to 800 on Enter
 
 const PRODUTOS_PAGE = 100;
 const UPSERT_BATCH = 500;
-const DELAY_MS = 400; // stay under Bling's 3 req/sec limit
+const CONCURRENCY = 3; // parallel variation fetches per batch (~2.7 req/s)
 
 const enc = new TextEncoder();
 
@@ -113,33 +113,75 @@ export async function POST(request: NextRequest) {
 
       // ── Step 4: fetch & upsert variations ─────────────────────────────────
       const pendingVars: Record<string, unknown>[] = [];
+      let processed = 0;
 
-      for (let i = 0; i < parentIds.length; i++) {
-        const parentId = parentIds[i];
+      // Build lookup: parentId → children already present in allProducts
+      const childrenByParent = new Map<number, Record<string, unknown>[]>();
+      for (const p of allProducts) {
+        const pid = p.idProdutoPai as number | undefined;
+        if (pid != null) {
+          if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+          childrenByParent.get(pid)!.push(p);
+        }
+      }
 
-        try {
-          const res = await blingFetch(blingUserId, `/produtos/variacoes/${parentId}`);
-          if (res.ok) {
-            const { data } = await res.json();
+      // Parents whose children are already in allProducts — no API call needed
+      const parentIdsNeedingFetch: number[] = [];
+      for (const parentId of parentIds) {
+        const children = childrenByParent.get(parentId);
+        if (children && children.length > 0) {
+          for (const child of children) {
+            pendingVars.push({ id: child.id, id_produto_pai: parentId, data: child, synced_at: now });
+          }
+          processed++;
+          await writer.write(
+            sse({ type: "progress", step: "variacoes", current: processed, total: parentIds.length })
+          );
+        } else {
+          parentIdsNeedingFetch.push(parentId);
+        }
+      }
+
+      // Flush after covering parents whose children were already fetched
+      if (pendingVars.length >= 200) {
+        const { error } = await getSupabase()
+          .from("bling_variacoes")
+          .upsert([...pendingVars], { onConflict: "id" });
+        if (error) throw new Error(`Supabase variacoes upsert: ${error.message}`);
+        pendingVars.length = 0;
+      }
+
+      // Remaining parents — batched concurrent API fetches (3 at a time, ~2.7 req/s)
+      for (let i = 0; i < parentIdsNeedingFetch.length; i += CONCURRENCY) {
+        const batch = parentIdsNeedingFetch.slice(i, i + CONCURRENCY);
+
+        const results = await Promise.allSettled(
+          batch.map((parentId) => blingFetch(blingUserId, `/produtos/variacoes/${parentId}`))
+        );
+
+        for (let j = 0; j < batch.length; j++) {
+          const parentId = batch[j];
+          const result = results[j];
+
+          if (result.status === "fulfilled" && result.value.ok) {
+            const { data } = await result.value.json();
             const variations: Record<string, unknown>[] = Array.isArray(data?.variacoes)
               ? data.variacoes
               : [];
-
             for (const v of variations) {
-              pendingVars.push({
-                id: v.id,
-                id_produto_pai: parentId,
-                data: v,
-                synced_at: now,
-              });
+              pendingVars.push({ id: v.id, id_produto_pai: parentId, data: v, synced_at: now });
             }
+          } else {
+            console.error(`[sync] variation fetch failed for parent ${parentId}`);
           }
-        } catch {
-          // skip failed parents — log but continue
-          console.error(`[sync] variation fetch failed for parent ${parentId}`);
+
+          processed++;
+          await writer.write(
+            sse({ type: "progress", step: "variacoes", current: processed, total: parentIds.length })
+          );
         }
 
-        // flush accumulated variations every 200
+        // flush accumulated variations every ~200
         if (pendingVars.length >= 200) {
           const { error } = await getSupabase()
             .from("bling_variacoes")
@@ -148,11 +190,7 @@ export async function POST(request: NextRequest) {
           pendingVars.length = 0;
         }
 
-        await writer.write(
-          sse({ type: "progress", step: "variacoes", current: i + 1, total: parentIds.length })
-        );
-
-        if (i < parentIds.length - 1) await delay(DELAY_MS);
+        if (i + CONCURRENCY < parentIdsNeedingFetch.length) await delay(1100);
       }
 
       // flush remaining variations

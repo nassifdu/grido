@@ -27,7 +27,12 @@ export default function SyncButton() {
         if (res.ok) {
           const data: ServerSyncStatus = await res.json();
           if (data.status === "syncing") {
-            setState({ status: "syncing", step: "produtos", count: 0 });
+            const isStale = data.sync_started_at
+              ? Date.now() - new Date(data.sync_started_at).getTime() > 6 * 60 * 1000
+              : false;
+            if (!isStale) {
+              setState({ status: "syncing", step: "produtos", count: 0 });
+            }
           } else if (data.status === "error") {
             setState({ status: "error", message: data.error_message || "Erro desconhecido" });
           }
