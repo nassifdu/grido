@@ -165,14 +165,18 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     const parentNome = parentNameMap.get(parentId) ?? "";
     for (const child of children) {
       if (child.situacao !== "A") continue;
+      const variacaoNome =
+        normalizeVariacao(child.variacao?.nome) ?? extractVariacaoFromNome(child.nome ?? "");
+      // when parent isn't in bling_produtos, strip the variacao suffix from child.nome
+      const nome = parentNome || (child.nome ?? "").replace(/\s+(?:Cor|Tamanho):[^;].*$/i, "").trim();
       output.push({
         idProdutoPai: parentId,
         id: child.id,
-        nome: parentNome,
+        nome,
         codigo: child.codigo ?? null,
         preco: child.preco ?? null,
         precoCusto: child.precoCusto ?? null,
-        variacao_nome: normalizeVariacao(child.variacao?.nome),
+        variacao_nome: variacaoNome,
         marca: child.marca ?? null,
         estoque: saldo(child.estoque),
       });
