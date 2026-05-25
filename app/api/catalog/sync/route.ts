@@ -21,7 +21,7 @@ async function delay(ms: number) {
 async function updateSyncStatus(
   blingUserId: string,
   status: string,
-  updates: { last_sync_at?: string; sync_started_at?: string; error_message?: string }
+  updates: { last_sync_at?: string; sync_started_at?: string; error_message?: string | null }
 ) {
   const { error } = await getSupabase()
     .from("sync_metadata")
