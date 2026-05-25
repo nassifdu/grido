@@ -38,7 +38,7 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-export default function CatalogView() {
+export default function CatalogView({ showSubtotals = true }: { showSubtotals?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductSummary[]>([]);
   const [selected, setSelected] = useState<ProductSummary[]>([]);
@@ -351,10 +351,10 @@ export default function CatalogView() {
                         ))}
 
                         {/* per-product subtotal */}
-                        {pivot && !pivot.isChildless && (
+                        {pivot && !pivot.isChildless && showSubtotals && (
                           <tr className="border-t border-zinc-200 bg-zinc-50/60">
                             <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 border-r border-zinc-100">
-                              Total
+                              Subtotal
                             </td>
                             {allSizes.map((s) => (
                               <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
@@ -374,7 +374,7 @@ export default function CatalogView() {
                 <tfoot>
                   <tr className="border-t-2 border-zinc-300 bg-zinc-100">
                     <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
-                      Total global
+                      Total
                     </td>
                     {allSizes.map((s) => (
                       <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums">
