@@ -155,17 +155,30 @@ export default function CatalogView() {
     }
   };
 
-  const selectAll = () => {
+  const selectAll = async () => {
     const toAdd = filteredResults.filter((p) => !selected.some((s) => s.key === p.key));
     if (toAdd.length === 0) return;
     setSelected((prev) => [...prev, ...toAdd]);
     for (const product of toAdd) {
       setPivots((prev) => new Map(prev).set(product.key, "loading"));
-      fetch(`/api/catalog/${product.groupId}`)
-        .then((res) => res.ok ? res.json() : Promise.reject())
-        .then((pivot: ProductPivot) => setPivots((prev) => new Map(prev).set(product.key, pivot)))
-        .catch(() => setPivots((prev) => new Map(prev).set(product.key, "error")));
     }
+    // Concurrency-limited queue — 3 at a time so we don't flood the server
+    const CONCURRENCY = 3;
+    let idx = 0;
+    async function worker() {
+      while (idx < toAdd.length) {
+        const product = toAdd[idx++];
+        try {
+          const res = await fetch(`/api/catalog/${product.groupId}`);
+          if (!res.ok) throw new Error();
+          const pivot: ProductPivot = await res.json();
+          setPivots((prev) => new Map(prev).set(product.key, pivot));
+        } catch {
+          setPivots((prev) => new Map(prev).set(product.key, "error"));
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   };
 
   // ── cell star / annotation ───────────────────────────────────────────────────

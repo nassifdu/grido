@@ -112,18 +112,30 @@ export default function SyncControl() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let streamActive = true;
 
-    const fallbackPoll = setInterval(async () => {
-      if (!streamActive) return;
+    // Whether we received a clean terminal event (done/error) from SSE.
+    // If the stream closes without one, the poll keeps running until resolved.
+    let terminalEventReceived = false;
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    function stopPoll() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    // Start fallback poll immediately — runs in parallel with SSE reading.
+    // If SSE delivers a terminal event first, we stop it; otherwise it recovers
+    // from a premature stream close (e.g. Vercel timeout at 300s).
+    pollInterval = setInterval(async () => {
       const data = await fetchStatus();
-      if (data === "unauthorized") { streamActive = false; clearInterval(fallbackPoll); setState({ status: "idle" }); return; }
+      if (data === "unauthorized") { stopPoll(); setState({ status: "idle" }); return; }
       if (!data) return;
-      if (data.status !== "syncing") {
-        streamActive = false;
-        clearInterval(fallbackPoll);
+      const isStale = data.sync_started_at
+        ? Date.now() - new Date(data.sync_started_at).getTime() > STALE_MS
+        : false;
+      if (data.status !== "syncing" || isStale) {
+        stopPoll();
         setLastSyncAt(data.last_sync_at);
-        if (data.status === "done" || data.status === "idle") {
+        if (data.status === "done" || data.status === "idle" || isStale) {
           setState({ status: "done" });
           setTimeout(() => setState({ status: "idle" }), 3000);
         } else if (data.status === "error") {
@@ -133,9 +145,9 @@ export default function SyncControl() {
     }, 2000);
 
     try {
-      while (streamActive) {
+      outer: while (true) {
         const { done, value } = await reader.read();
-        if (done) { streamActive = false; break; }
+        if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
         const chunks = buffer.split("\n\n");
@@ -158,22 +170,29 @@ export default function SyncControl() {
               });
             }
           } else if (event.type === "done") {
-            streamActive = false;
+            terminalEventReceived = true;
+            stopPoll();
             setState({ status: "done" });
             fetchStatus().then((d) => {
               if (d && d !== "unauthorized") setLastSyncAt(d.last_sync_at);
             });
             setTimeout(() => setState({ status: "idle" }), 3000);
+            break outer;
           } else if (event.type === "error") {
-            streamActive = false;
+            terminalEventReceived = true;
+            stopPoll();
             setState({ status: "error", message: (event.message as string) ?? "Erro" });
+            break outer;
           }
         }
       }
     } catch {
-      // stream closed — fallback poll handles recovery
+      // stream interrupted — poll is still running and will handle recovery
     } finally {
-      clearInterval(fallbackPoll);
+      // Only kill the poll if SSE already gave us a clean resolution.
+      // If the stream closed prematurely (no terminal event), leave the poll
+      // running so it can detect done/error/stale from the server.
+      if (terminalEventReceived) stopPoll();
       try { reader.cancel(); } catch { /* already closed */ }
     }
   }

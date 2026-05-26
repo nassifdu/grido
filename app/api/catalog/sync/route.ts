@@ -8,7 +8,7 @@ export const maxDuration = 300; // 300s max on Vercel Pro; raise to 800 on Enter
 
 const PRODUTOS_PAGE = 100;
 const UPSERT_BATCH = 500;
-const CONCURRENCY = 3; // parallel variation fetches per batch (~2.7 req/s)
+const CONCURRENCY = 5; // parallel variation fetches per batch (~4.5 req/s)
 
 const enc = new TextEncoder();
 
@@ -95,6 +95,10 @@ export async function POST(request: NextRequest) {
         if (error) throw new Error(`Supabase produtos upsert: ${error.message}`);
       }
 
+      // Mark products as synced immediately — so even a variation-phase timeout
+      // leaves a fresh last_sync_at instead of showing the previous sync's time.
+      await updateSyncStatus(blingUserId, "syncing", { last_sync_at: now });
+
       // ── Step 3: collect parent IDs ────────────────────────────────────────
       const parentIds = [
         ...new Set(
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest) {
           pendingVars.length = 0;
         }
 
-        if (i + CONCURRENCY < parentIds.length) await delay(1100);
+        if (i + CONCURRENCY < parentIds.length) await delay(1000);
       }
 
       // flush remaining variations
@@ -167,7 +171,7 @@ export async function POST(request: NextRequest) {
       }
 
       clearTransformCache();
-      await updateSyncStatus(blingUserId, "done", { last_sync_at: now });
+      await updateSyncStatus(blingUserId, "done", { last_sync_at: new Date().toISOString() });
       await writer.write(sse({ type: "done" }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro desconhecido";
