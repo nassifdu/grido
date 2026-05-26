@@ -4,9 +4,11 @@ import { searchProducts } from "@/lib/catalog";
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "30"), 100);
+  const cor = req.nextUrl.searchParams.get("cor") ?? "";
+  const tamanho = req.nextUrl.searchParams.get("tamanho") ?? "";
 
   try {
-    const products = await searchProducts(q, limit);
+    const products = await searchProducts(q, limit, cor, tamanho);
     return NextResponse.json({ products });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

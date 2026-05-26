@@ -118,12 +118,16 @@ function itemGroupId(item: TransformedItem): number {
 
 export async function searchProducts(
   query: string,
-  limit = 30
+  limit = 30,
+  corFilter = "",
+  tamanhoFilter = ""
 ): Promise<ProductSummary[]> {
   const items = await buildTransformed();
   const q = query.trim().toLowerCase();
+  const cf = corFilter.trim().toLowerCase();
+  const tf = tamanhoFilter.trim().toLowerCase();
 
-  type G = { key: string; groupId: number; nome: string; marca: string | null; count: number; totalEstoque: number; colors: Set<string> };
+  type G = { key: string; groupId: number; nome: string; marca: string | null; count: number; totalEstoque: number; colors: Set<string>; tamanhos: Set<string> };
   const groups = new Map<string, G>();
 
   for (const item of items) {
@@ -137,13 +141,15 @@ export async function searchProducts(
         count: 0,
         totalEstoque: 0,
         colors: new Set(),
+        tamanhos: new Set(),
       });
     }
     const g = groups.get(k)!;
     g.count++;
     g.totalEstoque += item.estoque;
-    const { cor } = parseVariacao(item.variacao_nome);
-    if (cor) g.colors.add(cor);
+    const { cor, tamanho } = parseVariacao(item.variacao_nome);
+    if (cor) g.colors.add(cor.toLowerCase());
+    if (tamanho) g.tamanhos.add(tamanho.toLowerCase());
   }
 
   const sorted = [...groups.values()].sort((a, b) =>
@@ -155,10 +161,16 @@ export async function searchProducts(
 
   const results: ProductSummary[] = [];
   for (const g of sorted) {
-    if (tokens.length > 0) {
-      const name = g.nome.toLowerCase();
-      if (tokens.some((t) => !name.includes(t))) continue;
-    }
+    const name = g.nome.toLowerCase();
+
+    if (tokens.length > 0 && tokens.some((t) => !name.includes(t))) continue;
+
+    // Cor filter: name includes cf OR any variation cor includes cf
+    if (cf && !name.includes(cf) && ![...g.colors].some((c) => c.includes(cf))) continue;
+
+    // Tamanho filter: name includes tf OR any variation tamanho includes tf
+    if (tf && !name.includes(tf) && ![...g.tamanhos].some((t) => t.includes(tf))) continue;
+
     results.push({
       key: g.key,
       groupId: g.groupId,
