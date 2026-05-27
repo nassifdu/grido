@@ -186,7 +186,9 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
         precoCusto: child.precoCusto ?? prodData?.precoCusto ?? null,
         variacao_nome: variacaoNome,
         marca: child.marca ?? prodData?.marca ?? null,
-        estoque: saldo(child.estoque ?? prodData?.estoque),
+        // Always prefer bling_produtos estoque — /produtos/variacoes/{id} returns
+        // stale/partial saldoVirtualTotal values that are not the true stock total.
+        estoque: saldo(prodData?.estoque ?? child.estoque),
       });
       seenIds.add(child.id);
     }
