@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { searchProducts } from "@/lib/catalog";
 
 export async function GET(req: NextRequest) {
+  const userId = await getSession(req);
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "30"), 100);
   const cor = req.nextUrl.searchParams.get("cor") ?? "";

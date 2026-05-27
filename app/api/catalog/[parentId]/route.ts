@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { getProductPivot } from "@/lib/catalog";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ parentId: string }> }
 ) {
+  const userId = await getSession(req);
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { parentId } = await params;
   const id = parseInt(parentId);
 
