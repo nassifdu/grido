@@ -120,6 +120,10 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
 
   const productsList: RawProduct[] = prodRows.map((r) => r.data);
 
+  // Lookup map so section 2 can fill in estoque/situacao that the
+  // /produtos/variacoes/{id} endpoint omits (it lacks stock data).
+  const productById = new Map<number, RawProduct>(productsList.map((p) => [p.id, p]));
+
   const variacoes: Record<string, RawProduct[]> = {};
   for (const row of varRows) {
     const pid = String(row.id_produto_pai);
@@ -159,12 +163,16 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     seenIds.add(p.id);
   }
 
-  // 2. children from bling_variacoes (richer source)
+  // 2. children from bling_variacoes (richer source for variacao.nome)
+  // Fall back to bling_produtos for estoque/situacao because the
+  // /produtos/variacoes/{id} Bling endpoint omits those fields.
   for (const [parentIdStr, children] of Object.entries(variacoes)) {
     const parentId = parseInt(parentIdStr);
     const parentNome = parentNameMap.get(parentId) ?? "";
     for (const child of children) {
-      if (child.situacao !== "A") continue;
+      const prodData = productById.get(child.id);
+      const situacao = child.situacao ?? prodData?.situacao;
+      if (situacao !== "A") continue;
       const variacaoNome =
         normalizeVariacao(child.variacao?.nome) ?? extractVariacaoFromNome(child.nome ?? "");
       // when parent isn't in bling_produtos, strip the variacao suffix from child.nome
@@ -173,12 +181,12 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
         idProdutoPai: parentId,
         id: child.id,
         nome,
-        codigo: child.codigo ?? null,
-        preco: child.preco ?? null,
-        precoCusto: child.precoCusto ?? null,
+        codigo: child.codigo ?? prodData?.codigo ?? null,
+        preco: child.preco ?? prodData?.preco ?? null,
+        precoCusto: child.precoCusto ?? prodData?.precoCusto ?? null,
         variacao_nome: variacaoNome,
-        marca: child.marca ?? null,
-        estoque: saldo(child.estoque),
+        marca: child.marca ?? prodData?.marca ?? null,
+        estoque: saldo(child.estoque ?? prodData?.estoque),
       });
       seenIds.add(child.id);
     }
