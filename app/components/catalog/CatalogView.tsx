@@ -429,22 +429,22 @@ export default function CatalogView() {
               <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
                 <button
                   onClick={() => setViewMode("grouped")}
-                  title="Agrupado por produto"
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${viewMode === "grouped" ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "grouped" ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                 >
-                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <circle cx="5" cy="6" r="2" />
                     <path strokeLinecap="round" d="M9 6h11M5 8v9M5 13h3M10 13h9M5 17h3M10 17h9" />
                   </svg>
+                  Agrupada
                 </button>
                 <button
                   onClick={() => setViewMode("flat")}
-                  title="Lista plana"
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${viewMode === "flat" ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "flat" ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                 >
-                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                   </svg>
+                  Plana
                 </button>
               </div>
 
@@ -452,30 +452,29 @@ export default function CatalogView() {
               <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
                 <button
                   onClick={() => setShowSubtotals((v) => !v)}
-                  title="Subtotais"
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${showSubtotals ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showSubtotals ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                 >
-                  {/* Sigma / Σ — sum icon */}
-                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M18 5H6l6 7-6 7h12" />
                   </svg>
+                  Subtotais
                 </button>
                 <button
                   onClick={() => setShowZeros((v) => !v)}
-                  title="Mostrar zeros"
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${showZeros ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showZeros ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                 >
-                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <ellipse cx="12" cy="12" rx="5.5" ry="7.5" />
                     <path strokeLinecap="round" d="M8 17l8-10" />
                   </svg>
+                  Zeros
                 </button>
                 <button
                   onClick={() => setShowPrice((v) => !v)}
-                  title="Mostrar preço"
-                  className={`flex items-center justify-center rounded-md px-2 py-1 text-[11px] font-semibold tracking-tight transition-colors ${showPrice ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showPrice ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                 >
-                  R$
+                  <span className="text-[11px] font-semibold leading-none">R$</span>
+                  Preço
                 </button>
               </div>
 
