@@ -17,12 +17,14 @@ export interface PivotCell {
   id: number;
   codigo: string | null;
   estoque: number;
+  preco: number | null;
 }
 
 export interface PivotRow {
   cor: string | null;
   cells: Record<string, PivotCell | null>;
   total: number;
+  rowPrice: number | null;
 }
 
 export interface ProductPivot {
@@ -36,6 +38,7 @@ export interface ProductPivot {
   grandTotal: number;
   isChildless: boolean;
   childlessCodigo?: string | null;
+  childlessPreco?: number | null;
   parentCodigo: string | null;
 }
 
@@ -222,6 +225,7 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
       grandTotal: group[0].estoque,
       isChildless: true,
       childlessCodigo: group[0].codigo,
+      childlessPreco: group[0].preco ?? null,
       parentCodigo,
     };
   }
@@ -241,12 +245,14 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
         cor,
         cells: Object.fromEntries(sizes.map((s) => [s, null])),
         total: 0,
+        rowPrice: null,
       });
     }
     const row = rowMap.get(cor)!;
     if (item.tamanho) {
-      row.cells[item.tamanho] = { id: item.id, codigo: item.codigo, estoque: item.estoque };
+      row.cells[item.tamanho] = { id: item.id, codigo: item.codigo, estoque: item.estoque, preco: item.preco ?? null };
     }
+    if (row.rowPrice === null && item.preco != null) row.rowPrice = item.preco;
     row.total += item.estoque;
   }
 

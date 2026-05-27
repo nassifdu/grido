@@ -48,6 +48,7 @@ export default function CatalogView() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSubtotals, setShowSubtotals] = useState(true);
   const [showZeros, setShowZeros] = useState(true);
+  const [showPrice, setShowPrice] = useState(false);
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
   const [starredCells, setStarredCells] = useState<Set<string>>(new Set());
   const [cellAnnotations, setCellAnnotations] = useState<Map<string, number>>(new Map());
@@ -71,8 +72,8 @@ export default function CatalogView() {
     return sortSizes([...sizeSet]);
   }, [pivots]);
 
-  // cor + sizes + total
-  const colSpan = allSizes.length + 2;
+  // cor + sizes + total + optional price
+  const colSpan = allSizes.length + 2 + (showPrice ? 1 : 0);
 
   // Global totals across all loaded pivots
   const globalTotals = useMemo(() => {
@@ -422,7 +423,7 @@ export default function CatalogView() {
         ) : (
           <>
             {/* ── Controls bar ──────────────────────────────────────────────── */}
-            <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-6">
+            <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-2">
 
               {/* View mode toggle */}
               <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
@@ -446,38 +447,37 @@ export default function CatalogView() {
                   </svg>
                 </button>
               </div>
-              {/* Subtotais */}
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <svg className="h-3.5 w-3.5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 10h18M3 15h18M3 20h10" />
-                </svg>
-                <span className="text-sm text-zinc-500">Subtotais</span>
-                <button
-                  role="switch"
-                  aria-checked={showSubtotals}
-                  onClick={() => setShowSubtotals((v) => !v)}
-                  className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full p-0 transition-colors duration-200 ${showSubtotals ? "bg-zinc-900" : "bg-zinc-300"}`}
-                >
-                  <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showSubtotals ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-                </button>
-              </label>
 
-              {/* Mostrar zeros */}
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <svg className="h-3.5 w-3.5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <ellipse cx="12" cy="12" rx="5.5" ry="7.5" />
-                  <path strokeLinecap="round" d="M8 17l8-10" />
-                </svg>
-                <span className="text-sm text-zinc-500">Mostrar zeros</span>
+              {/* Options toggles: Subtotais | Zeros | Preço */}
+              <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
                 <button
-                  role="switch"
-                  aria-checked={showZeros}
-                  onClick={() => setShowZeros((v) => !v)}
-                  className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full p-0 transition-colors duration-200 ${showZeros ? "bg-zinc-900" : "bg-zinc-300"}`}
+                  onClick={() => setShowSubtotals((v) => !v)}
+                  title="Subtotais"
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${showSubtotals ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
                 >
-                  <span className={`absolute left-0 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${showZeros ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                  {/* Sigma / Σ — sum icon */}
+                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 5H6l6 7-6 7h12" />
+                  </svg>
                 </button>
-              </label>
+                <button
+                  onClick={() => setShowZeros((v) => !v)}
+                  title="Mostrar zeros"
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${showZeros ? "bg-white shadow-sm" : "hover:bg-zinc-200/70"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <ellipse cx="12" cy="12" rx="5.5" ry="7.5" />
+                    <path strokeLinecap="round" d="M8 17l8-10" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setShowPrice((v) => !v)}
+                  title="Mostrar preço"
+                  className={`flex items-center justify-center rounded-md px-2 py-1 text-[11px] font-semibold tracking-tight transition-colors ${showPrice ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
+                >
+                  R$
+                </button>
+              </div>
 
               {/* Limpar */}
               <button
@@ -510,6 +510,11 @@ export default function CatalogView() {
                     <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
                       Total
                     </th>
+                    {showPrice && (
+                      <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-l border-zinc-200">
+                        R$
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -551,6 +556,7 @@ export default function CatalogView() {
                                 <td className="px-5 py-2.5 text-xs text-zinc-400 italic border-r border-zinc-100">{pivot.childlessCodigo ?? "sem variações"}</td>
                                 {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPreco != null ? pivot.childlessPreco.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             )}
 
@@ -561,6 +567,7 @@ export default function CatalogView() {
                                 </td>
                                 {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{row.rowPrice != null ? row.rowPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             ))}
 
@@ -571,6 +578,7 @@ export default function CatalogView() {
                                   <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">{pivot.totals[s] ?? 0}</td>
                                 ))}
                                 <td className="px-5 py-2 text-center text-sm font-bold text-zinc-900 tabular-nums">{pivot.grandTotal}</td>
+                                {showPrice && <td className="px-4 py-2 border-l border-zinc-200" />}
                               </tr>
                             )}
 
@@ -606,6 +614,7 @@ export default function CatalogView() {
                                 </td>
                                 {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPreco != null ? pivot.childlessPreco.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             )}
 
@@ -628,6 +637,7 @@ export default function CatalogView() {
                                 </td>
                                 {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{row.rowPrice != null ? row.rowPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             ))}
 
@@ -649,6 +659,7 @@ export default function CatalogView() {
                     <td className="px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums">
                       {globalTotals.grand}
                     </td>
+                    {showPrice && <td className="px-4 py-3 border-l border-zinc-300" />}
                   </tr>
                 </tfoot>
               </table>
