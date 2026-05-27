@@ -51,8 +51,9 @@ export default function CatalogView() {
   const [showPrice, setShowPrice] = useState(false);
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
   const [starredCells, setStarredCells] = useState<Set<string>>(new Set());
-  const [cellAnnotations, setCellAnnotations] = useState<Map<string, number>>(new Map());
-  const [annotatingCell, setAnnotatingCell] = useState<string | null>(null);
+  const [incomingAnnotations, setIncomingAnnotations] = useState<Map<string, number>>(new Map());
+  const [toBuyAnnotations, setToBuyAnnotations] = useState<Map<string, number>>(new Map());
+  const [annotatingCell, setAnnotatingCell] = useState<{ key: string; type: "incoming" | "toBuy" } | null>(null);
   const [annotationInput, setAnnotationInput] = useState("");
   const skipBlurRef = useRef(false);
 
@@ -192,14 +193,17 @@ export default function CatalogView() {
     });
   }
 
-  function openAnnotation(key: string, current: number | undefined) {
-    setAnnotatingCell(key);
+  function openAnnotation(key: string, type: "incoming" | "toBuy", current: number | undefined) {
+    setAnnotatingCell({ key, type });
     setAnnotationInput(current !== undefined ? String(current) : "");
   }
 
-  function commitAnnotation(key: string, input: string) {
+  function commitAnnotation(input: string) {
+    if (!annotatingCell) return;
+    const { key, type } = annotatingCell;
     const num = parseInt(input, 10);
-    setCellAnnotations((prev) => {
+    const setter = type === "incoming" ? setIncomingAnnotations : setToBuyAnnotations;
+    setter((prev) => {
       const next = new Map(prev);
       if (!input.trim() || isNaN(num) || num <= 0) next.delete(key); else next.set(key, num);
       return next;
@@ -211,29 +215,61 @@ export default function CatalogView() {
 
   function renderDataCell(s: string, cellKey: string, val: number) {
     const isStarred = starredCells.has(cellKey);
-    const annotation = cellAnnotations.get(cellKey);
-    const isAnnotating = annotatingCell === cellKey;
+    const incoming = incomingAnnotations.get(cellKey);
+    const toBuy = toBuyAnnotations.get(cellKey);
+    const isAnnotating = annotatingCell?.key === cellKey;
+    const annotatingType = isAnnotating ? annotatingCell!.type : null;
+
     return (
       <td key={s} className={`relative px-3 py-2.5 text-center tabular-nums border-r border-zinc-100 group${isStarred ? " bg-amber-50" : ""}`}>
+
+        {/* Top-left: Star */}
         <button onClick={(e) => { e.stopPropagation(); toggleStar(cellKey); }} title="Destacar"
           className={`absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
           <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </button>
-        {annotation !== undefined && !isAnnotating ? (
-          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }} title="Editar anotação"
-            className="absolute top-0 right-0.5 text-[10px] font-bold leading-none text-amber-500 hover:text-amber-600">
-            +{annotation}
+
+        {/* Top-right: Incoming stock (download icon, blue) */}
+        {incoming !== undefined && !isAnnotating ? (
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "incoming", incoming); }} title="Editar chegada"
+            className="absolute top-0 right-0.5 flex items-center gap-px text-[10px] font-bold leading-none text-blue-500 hover:text-blue-600">
+            <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 4v11M8 11l4 4 4-4M5 19h14" />
+            </svg>
+            {incoming}
           </button>
         ) : !isAnnotating && (
-          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, annotation); }} title="Anotar"
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "incoming", undefined); }} title="Registrar chegada"
             className="absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-            <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16M4 12h16" />
+            <svg className="h-3 w-3 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 4v11M8 11l4 4 4-4M5 19h14" />
             </svg>
           </button>
         )}
+
+        {/* Bottom-right: To buy ($ circle, amber) */}
+        {toBuy !== undefined && !isAnnotating ? (
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "toBuy", toBuy); }} title="Editar compra"
+            className="absolute bottom-0 right-0.5 flex items-center gap-px text-[10px] font-bold leading-none text-amber-500 hover:text-amber-600">
+            <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v10M14.5 9.5C14 8.5 13.1 8 12 8c-1.4 0-2.5.7-2.5 1.8 0 1.1.9 1.6 2.5 2.1s2.5 1.1 2.5 2.3c0 1.2-1.1 2-2.5 2s-2.5-.8-2.5-2" />
+            </svg>
+            {toBuy}
+          </button>
+        ) : !isAnnotating && (
+          <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "toBuy", undefined); }} title="Registrar compra"
+            className="absolute bottom-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            <svg className="h-3 w-3 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v10M14.5 9.5C14 8.5 13.1 8 12 8c-1.4 0-2.5.7-2.5 1.8 0 1.1.9 1.6 2.5 2.1s2.5 1.1 2.5 2.3c0 1.2-1.1 2-2.5 2s-2.5-.8-2.5-2" />
+            </svg>
+          </button>
+        )}
+
+        {/* Input overlay — shared by both annotation types */}
         {isAnnotating && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-white">
             <input
@@ -241,14 +277,20 @@ export default function CatalogView() {
               type="number" min="1" value={annotationInput}
               onChange={(e) => setAnnotationInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") { skipBlurRef.current = true; commitAnnotation(cellKey, annotationInput); }
+                if (e.key === "Enter") { skipBlurRef.current = true; commitAnnotation(annotationInput); }
                 else if (e.key === "Escape") { skipBlurRef.current = true; setAnnotatingCell(null); }
               }}
-              onBlur={() => { if (skipBlurRef.current) { skipBlurRef.current = false; return; } commitAnnotation(cellKey, annotationInput); }}
-              className="w-10 py-0.5 text-center text-xs border border-amber-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+              onBlur={() => { if (skipBlurRef.current) { skipBlurRef.current = false; return; } commitAnnotation(annotationInput); }}
+              className={`w-10 py-0.5 text-center text-xs border rounded focus:outline-none focus:ring-1 ${
+                annotatingType === "incoming"
+                  ? "border-blue-300 focus:ring-blue-400"
+                  : "border-amber-300 focus:ring-amber-400"
+              }`}
             />
           </div>
         )}
+
+        {/* Cell value */}
         {!isAnnotating && (
           val === 0
             ? (showZeros ? <span className="text-red-400">0</span> : <span className="opacity-30">·</span>)
