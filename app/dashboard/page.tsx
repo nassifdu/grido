@@ -85,9 +85,10 @@ export default async function DashboardPage() {
               </div>
             </a>
 
-            {/* Inconsistências widget (placeholder) */}
-            <div
-              className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm opacity-60 cursor-not-allowed select-none"
+            {/* Inconsistências widget */}
+            <a
+              href="/dashboard/inconsistencies"
+              className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm hover:shadow-md hover:border-zinc-300 transition-all"
             >
               {/* Placeholder photo */}
               <div className="h-44 w-full bg-gradient-to-br from-amber-700 to-orange-500 flex items-center justify-center overflow-hidden">
@@ -125,7 +126,7 @@ export default async function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-zinc-900">Inconsistências</p>
-                  <p className="text-xs text-zinc-500">Em breve</p>
+                  <p className="text-xs text-zinc-500">Análise automática de padrões</p>
                 </div>
                 <svg
                   className="ml-auto h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors"
@@ -137,7 +138,7 @@ export default async function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               </div>
-            </div>
+            </a>
           </div>
         </div>
       </main>
