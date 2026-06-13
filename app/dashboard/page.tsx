@@ -139,6 +139,60 @@ export default async function DashboardPage() {
                 </svg>
               </div>
             </a>
+            {/* Vendas widget */}
+            <a
+              href="/dashboard/vendas"
+              className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm hover:shadow-md hover:border-zinc-300 transition-all"
+            >
+              {/* Placeholder photo */}
+              <div className="h-44 w-full bg-gradient-to-br from-emerald-700 to-teal-500 flex items-center justify-center overflow-hidden">
+                <div
+                  className="absolute inset-0 opacity-10"
+                  style={{
+                    backgroundImage:
+                      "repeating-linear-gradient(90deg, #fff 0, #fff 1px, transparent 0, transparent 50%)",
+                    backgroundSize: "12px 12px",
+                  }}
+                />
+                <svg
+                  className="h-20 w-20 text-white/20"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={0.75}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                </svg>
+              </div>
+
+              {/* Card body */}
+              <div className="flex items-center gap-4 px-5 py-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 group-hover:bg-emerald-100 transition-colors">
+                  <svg
+                    className="h-5 w-5 text-emerald-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">Vendas</p>
+                  <p className="text-xs text-zinc-500">Análise de pedidos e faturamento</p>
+                </div>
+                <svg
+                  className="ml-auto h-4 w-4 text-zinc-300 group-hover:text-zinc-500 transition-colors"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </a>
           </div>
         </div>
       </main>
