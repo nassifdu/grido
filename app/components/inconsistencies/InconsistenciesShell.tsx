@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ProductRef {
   id: number;
@@ -29,21 +29,18 @@ const COLORS = {
     selected: "border-red-300 bg-red-50",
     header: "text-red-600",
     icon: "text-red-400",
-    dot: "bg-red-400",
   },
   amber: {
     badge: "bg-amber-100 text-amber-700",
     selected: "border-amber-300 bg-amber-50",
     header: "text-amber-600",
     icon: "text-amber-400",
-    dot: "bg-amber-400",
   },
   blue: {
     badge: "bg-blue-100 text-blue-700",
     selected: "border-blue-300 bg-blue-50",
     header: "text-blue-600",
     icon: "text-blue-400",
-    dot: "bg-blue-400",
   },
 };
 
@@ -98,48 +95,83 @@ function PatternCard({
   );
 }
 
-function ExpandedPanel({ pattern }: { pattern: InconsistencyPattern }) {
+function Modal({
+  pattern,
+  onClose,
+}: {
+  pattern: InconsistencyPattern;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-zinc-200 bg-white flex items-center justify-between">
-        <span className="text-xs font-semibold font-mono text-zinc-700">{pattern.label}</span>
-        <span className="text-xs text-zinc-400 tabular-nums">{pattern.count} {pattern.count === 1 ? "produto" : "produtos"}</span>
-      </div>
-      <div className="max-h-72 overflow-y-auto">
-        <table className="w-full">
-          <tbody>
-            {pattern.products.map((p) => (
-              <tr key={p.id} className="border-b border-zinc-100 last:border-0 hover:bg-white/70 transition-colors">
-                <td className="px-4 py-2 font-mono text-xs text-zinc-400 w-24 shrink-0 align-middle">
-                  {p.id}
-                </td>
-                <td className="px-2 py-2 text-xs text-zinc-800 align-middle">
-                  {p.nome}{p.cor ? ` ${p.cor}` : ""}
-                </td>
-                {p.variacao_nome && (
-                  <td className="px-4 py-2 text-xs text-zinc-400 text-right max-w-xs truncate align-middle hidden sm:table-cell">
-                    {p.variacao_nome}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={panelRef}
+        className="w-full max-w-lg mx-4 bg-white rounded-2xl border border-zinc-200 shadow-xl flex flex-col overflow-hidden"
+        style={{ maxHeight: "80vh" }}
+      >
+        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
+          <div>
+            <span className="text-sm font-semibold font-mono text-zinc-900">{pattern.label}</span>
+            <span className="ml-3 text-xs text-zinc-400 tabular-nums">
+              {pattern.count} {pattern.count === 1 ? "produto" : "produtos"}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto">
+          <table className="w-full">
+            <tbody>
+              {pattern.products.map((p) => (
+                <tr key={p.id} className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50 transition-colors">
+                  <td className="px-5 py-2.5 font-mono text-xs text-zinc-400 w-24 shrink-0 align-middle">
+                    {p.id}
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td className="px-2 py-2.5 text-xs text-zinc-800 align-middle">
+                    {p.nome}{p.cor ? ` ${p.cor}` : ""}
+                  </td>
+                  {p.variacao_nome && (
+                    <td className="px-5 py-2.5 text-xs text-zinc-400 text-right max-w-xs truncate align-middle hidden sm:table-cell">
+                      {p.variacao_nome}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-function InconsistencySection({ section }: { section: InconsistencySection }) {
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+function InconsistencySection({
+  section,
+  activePattern,
+  onSelect,
+}: {
+  section: InconsistencySection;
+  activePattern: InconsistencyPattern | null;
+  onSelect: (pattern: InconsistencyPattern | null) => void;
+}) {
   const c = COLORS[section.color];
-
-  const selectedPattern = selectedLabel
-    ? section.patterns.find((p) => p.label === selectedLabel) ?? null
-    : null;
-
-  const toggle = (label: string) =>
-    setSelectedLabel((prev) => (prev === label ? null : label));
 
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
@@ -153,7 +185,6 @@ function InconsistencySection({ section }: { section: InconsistencySection }) {
           {section.patterns.length}
         </span>
       </div>
-
       <div className="px-5 py-4">
         <div className="flex flex-wrap gap-2">
           {section.patterns.map((pattern) => (
@@ -161,13 +192,11 @@ function InconsistencySection({ section }: { section: InconsistencySection }) {
               key={pattern.label}
               pattern={pattern}
               color={section.color}
-              selected={selectedLabel === pattern.label}
-              onClick={() => toggle(pattern.label)}
+              selected={activePattern?.label === pattern.label}
+              onClick={() => onSelect(activePattern?.label === pattern.label ? null : pattern)}
             />
           ))}
         </div>
-
-        {selectedPattern && <ExpandedPanel pattern={selectedPattern} />}
       </div>
     </div>
   );
@@ -189,9 +218,8 @@ function SummaryBar({ sections }: { sections: InconsistencySection[] }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500 mb-6">
-      {items.map((item, i) => (
+      {items.map((item) => (
         <span key={item.label} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-zinc-300 mr-0 hidden sm:inline">·</span>}
           <span
             className={`h-1.5 w-1.5 rounded-full inline-block ${
               item.color === "red" ? "bg-red-400" : item.color === "amber" ? "bg-amber-400" : "bg-blue-400"
@@ -209,6 +237,7 @@ export default function InconsistenciesShell() {
   const [sections, setSections] = useState<InconsistencySection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activePattern, setActivePattern] = useState<InconsistencyPattern | null>(null);
 
   useEffect(() => {
     fetch("/api/inconsistencies")
@@ -286,13 +315,22 @@ export default function InconsistenciesShell() {
               <SummaryBar sections={sections} />
               <div className="flex flex-col gap-4">
                 {sections.map((section) => (
-                  <InconsistencySection key={section.id} section={section} />
+                  <InconsistencySection
+                    key={section.id}
+                    section={section}
+                    activePattern={activePattern}
+                    onSelect={setActivePattern}
+                  />
                 ))}
               </div>
             </>
           )}
         </div>
       </main>
+
+      {activePattern && (
+        <Modal pattern={activePattern} onClose={() => setActivePattern(null)} />
+      )}
     </div>
   );
 }
