@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import SyncLastTime from "@/app/components/catalog/SyncLastTime";
 
 interface ProductRef {
   id: number;
@@ -310,14 +311,17 @@ export default function InconsistenciesShell() {
               </span>
             </nav>
           </div>
-          <form action="/api/auth/logout" method="POST">
-            <button
-              type="submit"
-              className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
-            >
-              Sair
-            </button>
-          </form>
+          <div className="flex items-center gap-3 shrink-0">
+            <SyncLastTime />
+            <form action="/api/auth/logout" method="POST">
+              <button
+                type="submit"
+                className="rounded-lg bg-zinc-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 transition-colors"
+              >
+                Sair
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
