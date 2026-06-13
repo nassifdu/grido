@@ -12,8 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Getting Started
 
+**Requirements:** Node.js 18+
+
 1. **Set up environment:** Copy the required vars from the Env Vars section into `.env.local`
-2. **Migrations:** Run `supabase/migrations/001_bling_tokens.sql`, `002_catalog_cache.sql`, and `003_sync_metadata.sql` in your Supabase project (cloud or local CLI)
+2. **Migrations:** Run these SQL migrations in your Supabase project (cloud or local CLI):
+   - `supabase/migrations/001_bling_tokens.sql` — OAuth token storage table
+   - `supabase/migrations/002_catalog_cache.sql` — Product and variation cache tables
+   - `supabase/migrations/003_sync_metadata.sql` — Sync status tracking table
 3. **Seed data:** `npx tsx scripts/seed-catalog.ts` (reads `data/produtos.json` and `data/variacoes.json`)
 4. **Dev server:** `npm run dev` → http://localhost:3000
 
@@ -48,15 +53,23 @@ data/
   variacoes.json    # Local variation snapshot
 ```
 
-## Seed local data into Supabase
+## Scripts
 
-After running the SQL migration, upload the existing local JSON snapshot:
+**Seed catalog data**
 
 ```bash
 npx tsx scripts/seed-catalog.ts
 ```
 
-This reads `data/produtos.json` and `data/variacoes.json` and upserts them into `bling_produtos` / `bling_variacoes`. The tables must exist first (run `supabase/migrations/002_catalog_cache.sql`).
+Reads `data/produtos.json` and `data/variacoes.json` and upserts them into `bling_produtos` / `bling_variacoes`. The tables must exist first (run migration 002_catalog_cache.sql). Useful for populating test data without syncing from Bling.
+
+**Check stock & sync status**
+
+```bash
+node scripts/check-stock.mjs
+```
+
+Queries Supabase to inspect sync metadata and product/variation records. Searches `bling_produtos` and `bling_variacoes` for a specific product ID (`18883-0011` hardcoded in the script). Useful for debugging sync status and verifying product data structure.
 
 ## Debugging
 
@@ -139,15 +152,22 @@ The `/api/catalog/sync/status` endpoint allows clients to poll sync state, enabl
 
 ### Frontend
 
+**Key components:**
+
+| Component | Location | Role |
+|---|---|---|
+| `CatalogShell` | `app/components/catalog/CatalogShell.tsx` | Page layout, navbar, `showSubtotals` toggle state |
+| `CatalogView` | `app/components/catalog/CatalogView.tsx` | Renders the Estoque (stock) table grid |
+| `SyncButton` | `app/components/catalog/` | Real-time sync progress, SSE listener with fallback polling |
+| `SyncStatus` | `app/components/dashboard/` | Last sync timestamp and current status badge |
+| `DashboardHeader` | `app/components/dashboard/` | Dashboard navbar; wraps account ID and SyncStatus badges |
+
 **Page structure:**
 - `app/dashboard/catalog/page.tsx` (server component) imports and renders `CatalogShell`
-- `app/components/catalog/CatalogShell.tsx` (client component) manages the page layout, navbar, and `showSubtotals` state
-- `app/components/catalog/CatalogView.tsx` (client component) renders the Estoque table and accepts `showSubtotals` prop
+- `CatalogShell` manages the page layout, navbar, and `showSubtotals` state
+- `CatalogView` renders the Estoque table and accepts `showSubtotals` prop
 
-**Estoque view:**
-The Estoque (stock) table is a pivot grid (color × size) that displays product stock. Users can search products and pin multiple widgets simultaneously; each widget fetches its pivot data independently.
-
-Table styling:
+**Estoque table styling:**
 - Content-sized (`w-fit`) and centered horizontally via flex container
 - Vertical grid lines on all data cells (`border-r border-zinc-100`)
 - Horizontal grid lines on all data rows (`border-b border-zinc-100`)
@@ -156,14 +176,9 @@ Table styling:
 - Delete buttons ("×") display in light red (`text-red-400`) with hover states
 
 **Subtotals toggle:**
-The navbar includes a toggle switch (black/white) beside the Sync button that controls per-product subtotal row visibility. When enabled (default), each product group shows a "Subtotal" row before the next product; when disabled, only the global "Total" row appears.
-- Toggle state is managed in `CatalogShell`
-- Passed to `CatalogView` as `showSubtotals` prop
-- Subtotal rows render conditionally based on this prop
-
-**Sync status display:**
-- `SyncButton` (catalog navbar) — shows real-time SSE progress during sync, with fallback polling for interruptions
-- `SyncStatus` (dashboard navbar) — displays last sync timestamp and current sync state, refreshing every 10s
-- `DashboardHeader` — wraps the dashboard navbar and includes both the account ID badge and the SyncStatus badge
+Navbar toggle switch (beside Sync button) controls per-product subtotal row visibility:
+- When **enabled** (default): each product group shows a "Subtotal" row before the next product
+- When **disabled**: only the global "Total" row appears
+- Toggle state is managed in `CatalogShell`, passed to `CatalogView` as `showSubtotals` prop
 
 `lib/supabase.ts` uses a lazy singleton (`getSupabase()`) to avoid instantiating the client at build time.
