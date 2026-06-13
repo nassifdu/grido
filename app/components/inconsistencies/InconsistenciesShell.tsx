@@ -117,7 +117,7 @@ function Modal({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-lg mx-4 bg-white rounded-2xl border border-zinc-200 shadow-xl flex flex-col overflow-hidden"
+        className="w-[90vw] max-w-3xl bg-white rounded-2xl border border-zinc-200 shadow-xl flex flex-col overflow-hidden"
         style={{ maxHeight: "80vh" }}
       >
         <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between shrink-0">
