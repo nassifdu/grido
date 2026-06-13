@@ -20,6 +20,12 @@ export default function CatalogShell() {
               <span className="rounded-md px-2.5 py-1.5 font-medium text-zinc-900 bg-zinc-100">
                 Estoque
               </span>
+              <a
+                href="/dashboard/inconsistencies"
+                className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+              >
+                Inconsistências
+              </a>
             </nav>
           </div>
           <div className="flex items-center gap-3 shrink-0">

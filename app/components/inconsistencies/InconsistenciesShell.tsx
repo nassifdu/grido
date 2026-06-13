@@ -299,6 +299,12 @@ export default function InconsistenciesShell() {
               >
                 Dashboard
               </a>
+              <a
+                href="/dashboard/catalog"
+                className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+              >
+                Estoque
+              </a>
               <span className="rounded-md px-2.5 py-1.5 font-medium text-zinc-900 bg-zinc-100">
                 Inconsistências
               </span>
