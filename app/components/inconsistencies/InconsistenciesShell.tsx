@@ -270,21 +270,80 @@ function SummaryBar({ sections }: { sections: InconsistencySection[] }) {
   );
 }
 
+type ProgressState = { label: string; step: number; total: number };
+
 export default function InconsistenciesShell() {
   const [sections, setSections] = useState<InconsistencySection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<ProgressState>({ label: "Iniciando…", step: 0, total: 5 });
   const [error, setError] = useState<string | null>(null);
   const [activePattern, setActivePattern] = useState<InconsistencyPattern | null>(null);
 
   useEffect(() => {
-    fetch("/api/inconsistencies")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setSections(data.sections);
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function run() {
+      let response: Response;
+      try {
+        response = await fetch("/api/inconsistencies");
+      } catch {
+        if (!cancelled) setError("Falha ao conectar");
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      if (!response.ok || !response.body) {
+        if (!cancelled) setError(`HTTP ${response.status}`);
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split("\n\n");
+          buffer = chunks.pop() ?? "";
+
+          for (const chunk of chunks) {
+            if (!chunk.startsWith("data: ")) continue;
+            let event: Record<string, unknown>;
+            try { event = JSON.parse(chunk.slice(6)); } catch { continue; }
+
+            if (cancelled) break;
+
+            if (event.type === "progress") {
+              setProgress({
+                label: event.label as string,
+                step: event.step as number,
+                total: event.total as number,
+              });
+            } else if (event.type === "section") {
+              setSections((prev) => [...prev, event.section as InconsistencySection]);
+            } else if (event.type === "done") {
+              setLoading(false);
+            } else if (event.type === "error") {
+              setError((event.message as string) ?? "Erro desconhecido");
+              setLoading(false);
+            }
+          }
+        }
+      } catch {
+        if (!cancelled) setError("Conexão interrompida");
+        if (!cancelled) setLoading(false);
+      } finally {
+        try { reader.cancel(); } catch { /* already closed */ }
+      }
+    }
+
+    run();
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -337,12 +396,19 @@ export default function InconsistenciesShell() {
           <p className="text-sm text-zinc-500 mb-8">Padrões detectados automaticamente no catálogo.</p>
 
           {loading && (
-            <div className="flex items-center gap-3 text-sm text-zinc-500 py-12 justify-center">
-              <svg className="h-4 w-4 animate-spin text-zinc-400" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Analisando catálogo…
+            <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm px-6 py-5 mb-4">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-sm text-zinc-500">{progress.label}</span>
+                <span className="text-xs tabular-nums text-zinc-400">
+                  {progress.step} / {progress.total}
+                </span>
+              </div>
+              <div className="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-zinc-700 transition-all duration-500"
+                  style={{ width: progress.total > 0 ? `${(progress.step / progress.total) * 100}%` : "0%" }}
+                />
+              </div>
             </div>
           )}
 
@@ -362,9 +428,9 @@ export default function InconsistenciesShell() {
             </div>
           )}
 
-          {!loading && !error && sections.length > 0 && (
+          {sections.length > 0 && (
             <>
-              <SummaryBar sections={sections} />
+              {!loading && <SummaryBar sections={sections} />}
               <div className="flex flex-col gap-4">
                 {sections.map((section) => (
                   <InconsistencySection
