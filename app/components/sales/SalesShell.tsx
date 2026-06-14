@@ -8,6 +8,7 @@ interface SalesProductSummary {
   key: string;
   name: string;
   totalSold: number;
+  totalValor: number;
   colorCount: number;
   variantCount: number;
 }
@@ -16,6 +17,7 @@ interface SalesPivotRow {
   color: string | null;
   cells: Record<string, number>;
   total: number;
+  totalValor: number;
 }
 
 interface SalesPivot {
@@ -23,6 +25,7 @@ interface SalesPivot {
   rows: SalesPivotRow[];
   totals: Record<string, number>;
   grandTotal: number;
+  grandValor: number;
 }
 
 // ── size ordering ──────────────────────────────────────────────────────────────
@@ -115,6 +118,10 @@ function soldClass(val: number): string {
   return "text-zinc-700";
 }
 
+function fmtBRL(v: number): string {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // ── CSV parser ─────────────────────────────────────────────────────────────────
 
 function parseCSVLine(line: string): string[] {
@@ -147,18 +154,24 @@ function parseCSVLine(line: string): string[] {
   return fields;
 }
 
+function parseBRL(s: string): number {
+  return parseFloat(s.replace(/\./g, "").replace(",", ".")) || 0;
+}
+
 function processCSV(text: string): { products: SalesProductSummary[]; pivots: Record<string, SalesPivot> } {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
   type GroupAcc = {
     name: string;
     colorMap: Map<string | null, Map<string, number>>;
+    valorByColor: Map<string | null, number>;
     totalSold: number;
+    totalValor: number;
   };
 
   const groups = new Map<string, GroupAcc>();
 
-  for (const line of lines.slice(1)) {
+  for (const line of lines.slice(1, -1)) {
     const fields = parseCSVLine(line);
     if (fields.length < 4) continue;
 
@@ -166,11 +179,11 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     const qty = Math.round(parseFloat((fields[3] ?? "0").replace(',', '.')));
     if (qty <= 0 || !rawProduct) continue;
 
-    // Extract and normalize the variation suffix using the same logic as lib/transform.ts
+    const valor = parseBRL(fields[5] ?? "0");
+
     const variationName = extractVariationFromName(rawProduct);
     const { color, size } = parseVariationName(variationName);
 
-    // Strip the variation suffix to get the base product name
     const varSuffixMatch = rawProduct.match(/\s+(?:(?:Cor|Tamanho):[^;]+)(?:;(?:Cor|Tamanho):[^;]+)*$/i);
     const baseName = varSuffixMatch
       ? rawProduct.slice(0, rawProduct.length - varSuffixMatch[0].length).trim()
@@ -179,11 +192,12 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     if (!baseName) continue;
 
     if (!groups.has(baseName)) {
-      groups.set(baseName, { name: baseName, colorMap: new Map(), totalSold: 0 });
+      groups.set(baseName, { name: baseName, colorMap: new Map(), valorByColor: new Map(), totalSold: 0, totalValor: 0 });
     }
 
     const group = groups.get(baseName)!;
     group.totalSold += qty;
+    group.totalValor += valor;
 
     const sizeKey = size ?? "único";
     const colorKey = color ?? null;
@@ -191,6 +205,8 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     if (!group.colorMap.has(colorKey)) group.colorMap.set(colorKey, new Map());
     const sizeMap = group.colorMap.get(colorKey)!;
     sizeMap.set(sizeKey, (sizeMap.get(sizeKey) ?? 0) + qty);
+
+    group.valorByColor.set(colorKey, (group.valorByColor.get(colorKey) ?? 0) + valor);
   }
 
   const products: SalesProductSummary[] = [];
@@ -199,7 +215,7 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
   for (const [key, group] of groups.entries()) {
     const sizesSet = new Set<string>();
     for (const sizeMap of group.colorMap.values()) {
-      for (const size of sizeMap.keys()) sizesSet.add(size);
+      for (const s of sizeMap.keys()) sizesSet.add(s);
     }
     const sizes = sortSizes([...sizesSet]);
 
@@ -207,11 +223,12 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     for (const [color, sizeMap] of group.colorMap.entries()) {
       const cells: Record<string, number> = {};
       let rowTotal = 0;
-      for (const [size, qty] of sizeMap.entries()) {
-        cells[size] = qty;
+      for (const [s, qty] of sizeMap.entries()) {
+        cells[s] = qty;
         rowTotal += qty;
       }
-      rows.push({ color, cells, total: rowTotal });
+      const totalValor = group.valorByColor.get(color) ?? 0;
+      rows.push({ color, cells, total: rowTotal, totalValor });
     }
 
     const totals: Record<string, number> = {};
@@ -222,8 +239,8 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     const colorCount = [...group.colorMap.keys()].filter((c) => c !== null).length;
     const variantCount = [...group.colorMap.values()].reduce((sum, m) => sum + m.size, 0);
 
-    products.push({ key, name: group.name, totalSold: group.totalSold, colorCount, variantCount });
-    pivots[key] = { sizes, rows, totals, grandTotal: group.totalSold };
+    products.push({ key, name: group.name, totalSold: group.totalSold, totalValor: group.totalValor, colorCount, variantCount });
+    pivots[key] = { sizes, rows, totals, grandTotal: group.totalSold, grandValor: group.totalValor };
   }
 
   products.sort((a, b) => b.totalSold - a.totalSold);
@@ -236,7 +253,9 @@ export default function SalesShell() {
   const [products, setProducts] = useState<SalesProductSummary[]>([]);
   const [pivots, setPivots] = useState<Record<string, SalesPivot>>({});
   const [selected, setSelected] = useState<SalesProductSummary[]>([]);
-  const [showSubtotals, setShowSubtotals] = useState(true);
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
+  const [showZeros, setShowZeros] = useState(true);
+  const [showPrice, setShowPrice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -286,21 +305,33 @@ export default function SalesShell() {
     return sortSizes([...sizeSet]);
   }, [selected, pivots]);
 
-  const colSpan = allSizes.length + 2;
+  const colSpan = allSizes.length + 2 + (showPrice ? 1 : 0);
 
   const globalTotals = useMemo(() => {
     const bySize: Record<string, number> = {};
     let grand = 0;
+    let grandValor = 0;
     for (const p of selected) {
       const pivot = pivots[p.key];
       if (!pivot) continue;
       grand += pivot.grandTotal;
+      grandValor += pivot.grandValor;
       for (const s of allSizes) {
         bySize[s] = (bySize[s] ?? 0) + (pivot.totals[s] ?? 0);
       }
     }
-    return { bySize, grand };
+    return { bySize, grand, grandValor };
   }, [selected, pivots, allSizes]);
+
+  function renderDataCell(s: string, row: SalesPivotRow) {
+    const qty = row.cells[s] ?? 0;
+    if (qty === 0) {
+      return showZeros
+        ? <span className="text-zinc-200">·</span>
+        : null;
+    }
+    return <span className={soldClass(qty)}>{qty}</span>;
+  }
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-zinc-50">
@@ -466,19 +497,53 @@ export default function SalesShell() {
             <>
               {/* Controls bar */}
               <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-2">
-                <div className="flex items-center rounded-lg bg-zinc-100 p-0.5">
+
+                {/* View mode toggle */}
+                <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
                   <button
-                    onClick={() => setShowSubtotals((v) => !v)}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                      showSubtotals ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"
-                    }`}
+                    onClick={() => setViewMode("grouped")}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "grouped" ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                   >
                     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 5H6l6 7-6 7h12" />
+                      <circle cx="5" cy="6" r="2" />
+                      <path strokeLinecap="round" d="M9 6h11M5 8v9M5 13h3M10 13h9M5 17h3M10 17h9" />
                     </svg>
-                    Subtotais
+                    Agrupada
+                  </button>
+                  <button
+                    onClick={() => setViewMode("flat")}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${viewMode === "flat" ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
+                  >
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Plana
                   </button>
                 </div>
+
+                {/* Option toggles: Zeros | Preço */}
+                <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
+                  <button
+                    onClick={() => setShowZeros((v) => !v)}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showZeros ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
+                  >
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="3" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h1m16 0h1M12 3v1m0 16v1" />
+                    </svg>
+                    Zeros
+                  </button>
+                  <button
+                    onClick={() => setShowPrice((v) => !v)}
+                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showPrice ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
+                  >
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
+                    </svg>
+                    Preço
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setSelected([])}
                   className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
@@ -504,94 +569,134 @@ export default function SalesShell() {
                             {s}
                           </th>
                         ))}
-                        <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                        <th className={`px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap ${showPrice ? "border-r border-zinc-200" : ""}`}>
                           Total
                         </th>
+                        {showPrice && (
+                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                            Valor
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {selected.map((product, productIdx) => {
-                        const pivot = pivots[product.key];
-                        return (
-                          <Fragment key={product.key}>
-                            <tr className={`${productIdx > 0 ? "border-t-2 border-zinc-200" : ""} bg-zinc-50`}>
-                              <td colSpan={colSpan} className="px-5 py-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <span className="font-semibold text-zinc-800 leading-snug">{product.name}</span>
-                                    {pivot && (
-                                      <span className="flex-none text-xs text-zinc-400 tabular-nums">
-                                        {pivot.grandTotal} un. vendidos
-                                      </span>
-                                    )}
+                      {viewMode === "grouped" ? (
+                        selected.map((product, productIdx) => {
+                          const pivot = pivots[product.key];
+                          return (
+                            <Fragment key={product.key}>
+                              {/* Product group header */}
+                              <tr className={`${productIdx > 0 ? "border-t-2 border-zinc-200" : ""} bg-zinc-50`}>
+                                <td colSpan={colSpan} className="px-5 py-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span className="font-semibold text-zinc-800 leading-snug">{product.name}</span>
+                                      {pivot && (
+                                        <span className="flex-none text-xs text-zinc-400 tabular-nums">
+                                          {pivot.grandTotal} un. vendidos
+                                          {showPrice && ` · R$ ${fmtBRL(pivot.grandValor)}`}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => toggleProduct(product)}
+                                      aria-label="Remover produto"
+                                      className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
                                   </div>
-                                  <button
-                                    onClick={() => toggleProduct(product)}
-                                    aria-label="Remover produto"
-                                    className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                  >
-                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
+                                </td>
+                              </tr>
+
+                              {/* Color rows */}
+                              {pivot?.rows.map((row, rowIdx) => (
+                                <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
+                                  <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                    {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                  </td>
+                                  {allSizes.map((s) => (
+                                    <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
+                                      {renderDataCell(s, row)}
+                                    </td>
+                                  ))}
+                                  <td className={`px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
+                                    {row.total}
+                                  </td>
+                                  {showPrice && (
+                                    <td className="px-5 py-2.5 text-right text-zinc-600 tabular-nums text-xs">
+                                      {fmtBRL(row.totalValor)}
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </Fragment>
+                          );
+                        })
+                      ) : (
+                        // Flat view
+                        selected.map((product, productIdx) => {
+                          const pivot = pivots[product.key];
+                          return pivot?.rows.map((row, rowIdx) => (
+                            <tr
+                              key={`${product.key}-${rowIdx}`}
+                              className={`hover:bg-zinc-50/70 transition-colors border-b border-zinc-100 ${productIdx > 0 && rowIdx === 0 ? "border-t-2 border-zinc-200" : ""}`}
+                            >
+                              <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
+                                <div className="flex items-center gap-2">
+                                  {rowIdx === 0 && (
+                                    <button
+                                      onClick={() => toggleProduct(product)}
+                                      aria-label="Remover produto"
+                                      className="flex-none rounded-md p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    >
+                                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  )}
+                                  {rowIdx > 0 && <span className="w-4 shrink-0" />}
+                                  {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
                                 </div>
                               </td>
+                              {allSizes.map((s) => (
+                                <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
+                                  {renderDataCell(s, row)}
+                                </td>
+                              ))}
+                              <td className={`px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
+                                {row.total}
+                              </td>
+                              {showPrice && (
+                                <td className="px-5 py-2.5 text-right text-zinc-600 tabular-nums text-xs">
+                                  {fmtBRL(row.totalValor)}
+                                </td>
+                              )}
                             </tr>
-
-                            {pivot?.rows.map((row, rowIdx) => (
-                              <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
-                                <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
-                                  {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
-                                </td>
-                                {allSizes.map((s) => {
-                                  const qty = row.cells[s] ?? 0;
-                                  return (
-                                    <td key={s} className="px-3 py-2.5 text-center tabular-nums border-r border-zinc-100">
-                                      {qty === 0
-                                        ? <span className="text-zinc-200">·</span>
-                                        : <span className={soldClass(qty)}>{qty}</span>
-                                      }
-                                    </td>
-                                  );
-                                })}
-                                <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
-                                  {row.total}
-                                </td>
-                              </tr>
-                            ))}
-
-                            {pivot && showSubtotals && pivot.rows.length > 1 && (
-                              <tr className="border-t border-zinc-200 bg-zinc-50/60">
-                                <td className="px-5 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 border-r border-zinc-100">
-                                  Subtotal
-                                </td>
-                                {allSizes.map((s) => (
-                                  <td key={s} className="px-3 py-2 text-center text-xs font-semibold text-zinc-500 tabular-nums border-r border-zinc-100">
-                                    {pivot.totals[s] ?? 0}
-                                  </td>
-                                ))}
-                                <td className="px-5 py-2 text-center text-sm font-bold text-zinc-900 tabular-nums">
-                                  {pivot.grandTotal}
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })}
+                          ));
+                        })
+                      )}
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-zinc-300 bg-zinc-100">
-                        <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
+                        <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap border-r border-zinc-100">
                           Total
                         </td>
                         {allSizes.map((s) => (
-                          <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums">
+                          <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums border-r border-zinc-100">
                             {globalTotals.bySize[s] ?? 0}
                           </td>
                         ))}
-                        <td className="px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums">
+                        <td className={`px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
                           {globalTotals.grand}
                         </td>
+                        {showPrice && (
+                          <td className="px-5 py-3 text-right text-sm font-bold text-zinc-700 tabular-nums">
+                            {fmtBRL(globalTotals.grandValor)}
+                          </td>
+                        )}
                       </tr>
                     </tfoot>
                   </table>
