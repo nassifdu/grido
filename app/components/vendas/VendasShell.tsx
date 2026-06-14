@@ -108,6 +108,11 @@ export default function VendasShell() {
   const [to, setTo] = useState(defaultTo);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ message: string; current: number; total: number }>({
+    message: "",
+    current: 0,
+    total: 0,
+  });
   const [products, setProducts] = useState<VendasProductSummary[]>([]);
   const [pivots, setPivots] = useState<Record<string, VendasPivot>>({});
   const [selected, setSelected] = useState<VendasProductSummary[]>([]);
@@ -119,20 +124,61 @@ export default function VendasShell() {
     if (!from || !to) return;
     setLoading(true);
     setError(null);
+    setProgress({ message: "Iniciando…", current: 0, total: 0 });
     setSelected([]);
     setProducts([]);
     setPivots({});
     setSearched(true);
 
     try {
-      const res = await fetch(`/api/vendas?from=${from}&to=${to}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao buscar vendas");
-      setProducts(json.products ?? []);
-      setPivots(json.pivots ?? {});
+      const response = await fetch(`/api/vendas?from=${from}&to=${to}`);
+      if (!response.body) throw new Error("Sem resposta do servidor");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          let payload: Record<string, unknown>;
+          try {
+            payload = JSON.parse(line.slice(6));
+          } catch {
+            continue;
+          }
+
+          switch (payload.type) {
+            case "status":
+              setProgress((p) => ({ ...p, message: payload.message as string }));
+              break;
+            case "progress":
+              setProgress({
+                message: payload.message as string,
+                current: payload.current as number,
+                total: payload.total as number,
+              });
+              break;
+            case "done":
+              setProducts((payload.products as VendasProductSummary[]) ?? []);
+              setPivots((payload.pivots as Record<string, VendasPivot>) ?? {});
+              setLoading(false);
+              break;
+            case "error":
+              throw new Error(payload.message as string);
+          }
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro desconhecido");
-    } finally {
       setLoading(false);
     }
   }
@@ -285,6 +331,28 @@ export default function VendasShell() {
             </button>
           </div>
 
+          {/* Progress bar */}
+          {loading && (
+            <div className="shrink-0 px-3 pt-3 pb-2">
+              <p className="text-xs text-zinc-500 mb-1.5 truncate">{progress.message}</p>
+              <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
+                {progress.total > 0 ? (
+                  <div
+                    className="bg-zinc-700 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                  />
+                ) : (
+                  <div className="h-1.5 rounded-full bg-zinc-300 animate-pulse w-full" />
+                )}
+              </div>
+              {progress.total > 0 && (
+                <p className="text-[10px] text-zinc-400 mt-1 tabular-nums text-right">
+                  {progress.current}/{progress.total}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="mx-3 mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 shrink-0">
@@ -300,12 +368,6 @@ export default function VendasShell() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                 </svg>
                 <p className="text-xs text-zinc-400">Selecione um período e busque</p>
-              </div>
-            )}
-
-            {searched && loading && (
-              <div className="flex items-center justify-center py-16">
-                <Spinner className="h-5 w-5 text-zinc-300" />
               </div>
             )}
 
