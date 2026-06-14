@@ -43,7 +43,12 @@ function normalizeSize(raw: string): string {
   return s.toUpperCase();
 }
 
-function parseVariacaoNome(vn: string | null): { cor: string | null; tamanho: string | null } {
+/**
+ * Parse cor/tamanho from a variacao_nome string like "Cor:AZUL;Tamanho:M".
+ * Falls back to extracting directly from the description when no structured
+ * format is found.
+ */
+function parseVariacao(vn: string | null): { cor: string | null; tamanho: string | null } {
   if (!vn) return { cor: null, tamanho: null };
   const parts = vn.split(";");
   let cor: string | null = null;
@@ -54,8 +59,29 @@ function parseVariacaoNome(vn: string | null): { cor: string | null; tamanho: st
     if (m[1].toLowerCase() === "cor") cor = m[2].trim();
     else tamanho = normalizeSize(m[2].trim());
   }
-  if (!cor && !tamanho) tamanho = normalizeSize(vn.trim());
+  // If the string had no structured keys, treat it as a raw tamanho value
+  if (!cor && !tamanho && vn.trim()) tamanho = normalizeSize(vn.trim());
   return { cor, tamanho };
+}
+
+/**
+ * Try to extract cor/tamanho from a plain product description.
+ * Handles "Cor:AZUL;Tamanho:M" embedded at the end of a description string.
+ */
+function extractFromDescricao(desc: string): {
+  nome: string;
+  cor: string | null;
+  tamanho: string | null;
+} {
+  // Look for " Cor:X;Tamanho:Y" or " Tamanho:Y;Cor:X" suffix
+  const m = desc.match(
+    /^(.*?)\s+((?:(?:Cor|Tamanho):[^;]+)(?:;(?:Cor|Tamanho):[^;]+)*)$/i
+  );
+  if (m) {
+    const { cor, tamanho } = parseVariacao(m[2]);
+    return { nome: m[1].trim(), cor, tamanho };
+  }
+  return { nome: desc.trim(), cor: null, tamanho: null };
 }
 
 // ── Bling types ───────────────────────────────────────────────────────────────
@@ -111,18 +137,22 @@ export async function GET(req: NextRequest) {
 
   (async () => {
     try {
-      // ── 1. Load local catalog ───────────────────────────────────────────────
+      // ── 1. Load catalog as an optional enrichment source ──────────────────
+      //    The catalog is NOT required — if a sold product is not cached here
+      //    we still show it, falling back to the order's own description.
       await writer.write(sse({ type: "status", message: "Carregando catálogo local…" }));
 
       const catalogItems = await buildTransformed();
-      const varById = new Map(catalogItems.map((it) => [it.id, it]));
-      const varByCodigo = new Map(
+      // Primary lookup: variation/product id → enriched item
+      const catalogById = new Map(catalogItems.map((it) => [it.id, it]));
+      // Secondary lookup: variation codigo → enriched item
+      const catalogByCodigo = new Map(
         catalogItems.filter((it) => it.codigo).map((it) => [it.codigo!, it])
       );
 
-      console.log(`[vendas] catalog: ${catalogItems.length} items`);
+      console.log(`[vendas] catalog: ${catalogItems.length} items (enrichment only)`);
 
-      // ── 2. Fetch order list, auto-detect whether itens are embedded ─────────
+      // ── 2. Fetch order list from Bling ─────────────────────────────────────
       await writer.write(sse({ type: "status", message: "Buscando pedidos no Bling…" }));
 
       const orders: BlingOrder[] = [];
@@ -162,7 +192,7 @@ export async function GET(req: NextRequest) {
         await delay(DELAY_MS);
       }
 
-      // ── 3. Fetch individual orders if list didn't embed itens ───────────────
+      // ── 3. Fetch individual orders when list doesn't embed itens ──────────
       if (!hasEmbeddedItems && orderIds.length > 0) {
         console.log(`[vendas] fetching ${orderIds.length} individual orders…`);
 
@@ -200,9 +230,9 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      console.log(`[vendas] ${orders.length} orders with itens`);
+      console.log(`[vendas] ${orders.length} orders retrieved`);
 
-      // ── 4. Aggregate ────────────────────────────────────────────────────────
+      // ── 4. Aggregate — all sold items, catalog used only for enrichment ────
       await writer.write(sse({ type: "status", message: "Processando resultados…" }));
 
       type CellAcc = { qty: number; valor: number };
@@ -216,54 +246,64 @@ export async function GET(req: NextRequest) {
 
       const groups = new Map<string, GroupAcc>();
       let totalItems = 0;
-      let matchedItems = 0;
-      const unmatchedSample: string[] = [];
+      let enrichedItems = 0;
 
       for (const order of orders) {
         for (const item of order.itens ?? []) {
           totalItems++;
           const prodId = item.produto?.id;
           const prodCodigo = item.produto?.codigo;
+          const prodDescricao = item.produto?.descricao ?? "";
           const qty = item.quantidade ?? 0;
           if (qty <= 0) continue;
+          const valor = (item.valor ?? 0) * qty;
 
-          const variation =
-            (prodId ? varById.get(prodId) : undefined) ??
-            (prodCodigo ? varByCodigo.get(prodCodigo) : undefined);
+          // Try to enrich from local catalog (id → codigo → fallback to order desc)
+          const catalogMatch =
+            (prodId ? catalogById.get(prodId) : undefined) ??
+            (prodCodigo ? catalogByCodigo.get(prodCodigo) : undefined);
 
-          if (!variation) {
-            if (unmatchedSample.length < 5) {
-              unmatchedSample.push(
-                `id=${prodId} codigo=${prodCodigo} desc="${item.produto?.descricao}"`
-              );
-            }
-            continue;
+          let nome: string;
+          let cor: string | null;
+          let tamanho: string | null;
+          let groupKey: string;
+
+          if (catalogMatch) {
+            enrichedItems++;
+            nome = catalogMatch.nome;
+            const parsed = parseVariacao(catalogMatch.variacao_nome);
+            cor = parsed.cor;
+            tamanho = parsed.tamanho;
+            // Use same key scheme as catalog so data is consistent with Estoque
+            groupKey =
+              catalogMatch.idProdutoPai != null
+                ? `p:${catalogMatch.idProdutoPai}`
+                : `s:${catalogMatch.id}`;
+          } else {
+            // No catalog match — extract directly from the order description
+            const extracted = extractFromDescricao(prodDescricao);
+            nome = extracted.nome || prodDescricao || `Produto ${prodId ?? prodCodigo}`;
+            cor = extracted.cor;
+            tamanho = extracted.tamanho;
+            // Group by the product code or id from the order
+            groupKey = `o:${prodCodigo ?? prodId ?? prodDescricao}`;
           }
 
-          matchedItems++;
-          const valor = (item.valor ?? 0) * qty;
-          const key =
-            variation.idProdutoPai != null
-              ? `p:${variation.idProdutoPai}`
-              : `s:${variation.id}`;
-
-          if (!groups.has(key)) {
-            groups.set(key, {
-              nome: variation.nome,
-              key,
+          if (!groups.has(groupKey)) {
+            groups.set(groupKey, {
+              nome,
+              key: groupKey,
               corMap: new Map(),
               totalVendido: 0,
               valorTotal: 0,
             });
           }
 
-          const group = groups.get(key)!;
+          const group = groups.get(groupKey)!;
           group.totalVendido += qty;
           group.valorTotal += valor;
 
-          const { cor, tamanho } = parseVariacaoNome(variation.variacao_nome);
           const tamKey = tamanho ?? "único";
-
           if (!group.corMap.has(cor ?? null)) group.corMap.set(cor ?? null, new Map());
           const tamMap = group.corMap.get(cor ?? null)!;
           const prev = tamMap.get(tamKey) ?? { qty: 0, valor: 0 };
@@ -272,11 +312,10 @@ export async function GET(req: NextRequest) {
       }
 
       console.log(
-        `[vendas] items total=${totalItems} matched=${matchedItems} unmatched=${totalItems - matchedItems}`
+        `[vendas] items total=${totalItems} enriched=${enrichedItems} from-order=${totalItems - enrichedItems}`
       );
-      if (unmatchedSample.length) console.log("[vendas] unmatched sample:", unmatchedSample);
 
-      // ── 5. Build response payload ───────────────────────────────────────────
+      // ── 5. Build response payload ─────────────────────────────────────────
       type VendasProductSummary = {
         key: string; nome: string; totalVendido: number;
         valorTotal: number; colorCount: number; variantCount: number;
@@ -342,9 +381,8 @@ export async function GET(req: NextRequest) {
           _debug: {
             ordersCount: orders.length,
             totalItems,
-            matchedItems,
-            unmatchedItems: totalItems - matchedItems,
-            unmatchedSample,
+            enrichedItems,
+            fromOrderDesc: totalItems - enrichedItems,
             catalogSize: catalogItems.length,
           },
         })
@@ -354,15 +392,9 @@ export async function GET(req: NextRequest) {
       console.error("[api/vendas]", message);
       try {
         await writer.write(sse({ type: "error", message }));
-      } catch {
-        // stream already closed
-      }
+      } catch { /* stream closed */ }
     } finally {
-      try {
-        await writer.close();
-      } catch {
-        // already closed
-      }
+      try { await writer.close(); } catch { /* already closed */ }
     }
   })();
 
