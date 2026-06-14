@@ -14,20 +14,20 @@ interface RawProduct {
 }
 
 export interface TransformedItem {
-  idProdutoPai: number | null;
+  parentId: number | null;
   id: number;
-  nome: string;
+  name: string;
   codigo: string | null;
-  preco: number | null;
-  precoCusto: number | null;
-  variacao_nome: string | null;
-  marca: string | null;
-  estoque: number;
+  price: number | null;
+  costPrice: number | null;
+  variationName: string | null;
+  brand: string | null;
+  stock: number;
 }
 
 // ── variacao_nome normalization ────────────────────────────────────────────────
 
-function isCorrectVariacao(s: string): boolean {
+function isCorrectVariation(s: string): boolean {
   return (
     /^Cor:[^;]+;Tamanho:[^;]+$/.test(s) ||
     /^Tamanho:[^;]+;Cor:[^;]+$/.test(s)
@@ -39,7 +39,7 @@ function hasBothDimensions(s: string): boolean {
   return l.includes("cor") && l.includes("tamanho");
 }
 
-function fixVariacaoNome(s: string): string {
+function fixVariationName(s: string): string {
   s = s.replace(/\s*;\s*/g, ";");
   s = s.replace(/^Cor;([^;]+);/, "Cor:$1;");
   s = s.replace(/((?:Cor|Tamanho):[^;:]+):(?=(?:[Cc]or|[Tt]amanho):)/, "$1;");
@@ -52,21 +52,21 @@ function fixVariacaoNome(s: string): string {
   return s;
 }
 
-function normalizeVariacao(vn: string | null | undefined): string | null {
+function normalizeVariation(vn: string | null | undefined): string | null {
   if (vn == null) return null;
   const s = String(vn).trim();
   if (!s) return null;
-  if (!hasBothDimensions(s) || isCorrectVariacao(s)) return s;
-  return fixVariacaoNome(s);
+  if (!hasBothDimensions(s) || isCorrectVariation(s)) return s;
+  return fixVariationName(s);
 }
 
-function extractVariacaoFromNome(nome: string): string | null {
-  const m = nome.match(/\s+((?:(?:Cor|Tamanho):[^;]+)(?:;(?:Cor|Tamanho):[^;]+)*)$/i);
+function extractVariationFromName(name: string): string | null {
+  const m = name.match(/\s+((?:(?:Cor|Tamanho):[^;]+)(?:;(?:Cor|Tamanho):[^;]+)*)$/i);
   if (!m) return null;
-  return normalizeVariacao(m[1]);
+  return normalizeVariation(m[1]);
 }
 
-function saldo(e: RawProduct["estoque"]): number {
+function getStock(e: RawProduct["estoque"]): number {
   if (e == null) return 0;
   if (typeof e === "object") return (e as { saldoVirtualTotal?: number }).saldoVirtualTotal ?? 0;
   return e as number;
@@ -150,15 +150,15 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     if (p.idProdutoPai != null) continue;
     if (idsWithChildren.has(p.id)) continue;
     output.push({
-      idProdutoPai: null,
+      parentId: null,
       id: p.id,
-      nome: p.nome ?? "",
+      name: p.nome ?? "",
       codigo: p.codigo ?? null,
-      preco: p.preco ?? null,
-      precoCusto: p.precoCusto ?? null,
-      variacao_nome: null,
-      marca: p.marca ?? null,
-      estoque: saldo(p.estoque),
+      price: p.preco ?? null,
+      costPrice: p.precoCusto ?? null,
+      variationName: null,
+      brand: p.marca ?? null,
+      stock: getStock(p.estoque),
     });
     seenIds.add(p.id);
   }
@@ -168,27 +168,27 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
   // /produtos/variacoes/{id} Bling endpoint omits those fields.
   for (const [parentIdStr, children] of Object.entries(variacoes)) {
     const parentId = parseInt(parentIdStr);
-    const parentNome = parentNameMap.get(parentId) ?? "";
+    const parentName = parentNameMap.get(parentId) ?? "";
     for (const child of children) {
       const prodData = productById.get(child.id);
-      const situacao = child.situacao ?? prodData?.situacao;
-      if (situacao !== "A") continue;
-      const variacaoNome =
-        normalizeVariacao(child.variacao?.nome) ?? extractVariacaoFromNome(child.nome ?? "");
+      const status = child.situacao ?? prodData?.situacao;
+      if (status !== "A") continue;
+      const variationName =
+        normalizeVariation(child.variacao?.nome) ?? extractVariationFromName(child.nome ?? "");
       // when parent isn't in bling_produtos, strip the variacao suffix from child.nome
-      const nome = parentNome || (child.nome ?? "").replace(/\s+(?:Cor|Tamanho):[^;].*$/i, "").trim();
+      const name = parentName || (child.nome ?? "").replace(/\s+(?:Cor|Tamanho):[^;].*$/i, "").trim();
       output.push({
-        idProdutoPai: parentId,
+        parentId,
         id: child.id,
-        nome,
+        name,
         codigo: child.codigo ?? prodData?.codigo ?? null,
-        preco: child.preco ?? prodData?.preco ?? null,
-        precoCusto: child.precoCusto ?? prodData?.precoCusto ?? null,
-        variacao_nome: variacaoNome,
-        marca: child.marca ?? prodData?.marca ?? null,
+        price: child.preco ?? prodData?.preco ?? null,
+        costPrice: child.precoCusto ?? prodData?.precoCusto ?? null,
+        variationName,
+        brand: child.marca ?? prodData?.marca ?? null,
         // Always prefer bling_produtos estoque — /produtos/variacoes/{id} returns
         // stale/partial saldoVirtualTotal values that are not the true stock total.
-        estoque: saldo(prodData?.estoque ?? child.estoque),
+        stock: getStock(prodData?.estoque ?? child.estoque),
       });
       seenIds.add(child.id);
     }
@@ -199,18 +199,18 @@ export async function buildTransformed(): Promise<TransformedItem[]> {
     if (p.situacao !== "A") continue;
     if (p.idProdutoPai == null) continue;
     if (seenIds.has(p.id)) continue;
-    const variacaoNome =
-      normalizeVariacao(p.variacao?.nome) ?? extractVariacaoFromNome(p.nome ?? "");
+    const variationName =
+      normalizeVariation(p.variacao?.nome) ?? extractVariationFromName(p.nome ?? "");
     output.push({
-      idProdutoPai: p.idProdutoPai,
+      parentId: p.idProdutoPai,
       id: p.id,
-      nome: parentNameMap.get(p.idProdutoPai) ?? "",
+      name: parentNameMap.get(p.idProdutoPai) ?? "",
       codigo: p.codigo ?? null,
-      preco: p.preco ?? null,
-      precoCusto: p.precoCusto ?? null,
-      variacao_nome: variacaoNome,
-      marca: p.marca ?? null,
-      estoque: saldo(p.estoque),
+      price: p.preco ?? null,
+      costPrice: p.precoCusto ?? null,
+      variationName,
+      brand: p.marca ?? null,
+      stock: getStock(p.estoque),
     });
     seenIds.add(p.id);
   }

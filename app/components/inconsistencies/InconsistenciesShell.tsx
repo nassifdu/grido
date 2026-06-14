@@ -310,7 +310,7 @@ export default function InconsistenciesShell() {
                 Inconsistências
               </span>
               <a
-                href="/dashboard/vendas"
+                href="/dashboard/sales"
                 className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
               >
                 Vendas

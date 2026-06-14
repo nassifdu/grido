@@ -3,7 +3,7 @@ import { checkStrings } from "./spellcheck";
 
 export interface ProductRef {
   id: number;
-  nome: string;
+  name: string;
   color: string | null;
   variationName: string | null;
 }
@@ -38,7 +38,7 @@ function extractRaw(vn: string | null): { rawColor: string | null; rawSize: stri
 
 export async function analyzeInconsistencies(): Promise<InconsistencySection[]> {
   const items = await buildTransformed();
-  const variations = items.filter((i) => i.idProdutoPai !== null);
+  const variations = items.filter((i) => i.parentId !== null);
 
   // ── Broken ─────────────────────────────────────────────────────────────────
 
@@ -47,20 +47,20 @@ export async function analyzeInconsistencies(): Promise<InconsistencySection[]> 
   const missingSizeMap = new Map<string, ProductRef[]>();
 
   for (const item of variations) {
-    const { rawColor, rawSize } = extractRaw(item.variacao_nome);
-    const ref: ProductRef = { id: item.id, nome: item.nome, color: rawColor, variationName: item.variacao_nome };
+    const { rawColor, rawSize } = extractRaw(item.variationName);
+    const ref: ProductRef = { id: item.id, name: item.name, color: rawColor, variationName: item.variationName };
 
-    if (!item.variacao_nome || (!rawColor && !rawSize)) {
+    if (!item.variationName || (!rawColor && !rawSize)) {
       noVariationProducts.push(ref);
       continue;
     }
 
     if (!rawColor) {
-      const k = item.variacao_nome;
+      const k = item.variationName;
       if (!missingColorMap.has(k)) missingColorMap.set(k, []);
       missingColorMap.get(k)!.push(ref);
     } else if (!rawSize) {
-      const k = item.variacao_nome;
+      const k = item.variationName;
       if (!missingSizeMap.has(k)) missingSizeMap.set(k, []);
       missingSizeMap.get(k)!.push(ref);
     }
@@ -84,10 +84,10 @@ export async function analyzeInconsistencies(): Promise<InconsistencySection[]> 
   const noPriceProducts: ProductRef[] = [];
 
   for (const item of items) {
-    const { rawColor } = extractRaw(item.variacao_nome);
-    const ref: ProductRef = { id: item.id, nome: item.nome, color: rawColor, variationName: item.variacao_nome };
+    const { rawColor } = extractRaw(item.variationName);
+    const ref: ProductRef = { id: item.id, name: item.name, color: rawColor, variationName: item.variationName };
     if (!item.codigo) noCodeProducts.push(ref);
-    if (!item.preco) noPriceProducts.push(ref);
+    if (!item.price) noPriceProducts.push(ref);
   }
 
   const incompletePatterns: InconsistencyPattern[] = [];
@@ -104,9 +104,9 @@ export async function analyzeInconsistencies(): Promise<InconsistencySection[]> 
   const colorMap = new Map<string, ProductRef[]>();
 
   for (const item of variations) {
-    if (!item.variacao_nome) continue;
-    const { rawColor, rawSize } = extractRaw(item.variacao_nome);
-    const ref: ProductRef = { id: item.id, nome: item.nome, color: rawColor, variationName: item.variacao_nome };
+    if (!item.variationName) continue;
+    const { rawColor, rawSize } = extractRaw(item.variationName);
+    const ref: ProductRef = { id: item.id, name: item.name, color: rawColor, variationName: item.variationName };
 
     if (rawSize) {
       if (!sizeMap.has(rawSize)) sizeMap.set(rawSize, []);

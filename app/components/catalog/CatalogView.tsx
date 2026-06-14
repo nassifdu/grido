@@ -39,8 +39,8 @@ function Spinner({ className = "" }: { className?: string }) {
 
 export default function CatalogView() {
   const [query, setQuery] = useState("");
-  const [corFilter, setCorFilter] = useState("");
-  const [tamanhoFilter, setTamanhoFilter] = useState("");
+  const [colorFilter, setColorFilter] = useState("");
+  const [sizeFilter, setSizeFilter] = useState("");
   const [minimo, setMinimo] = useState(0);
   const [results, setResults] = useState<ProductSummary[]>([]);
   const [selected, setSelected] = useState<ProductSummary[]>([]);
@@ -59,8 +59,8 @@ export default function CatalogView() {
 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const queryRef = useRef(query);
-  const corRef = useRef(corFilter);
-  const tamRef = useRef(tamanhoFilter);
+  const colorRef = useRef(colorFilter);
+  const sizeRef = useRef(sizeFilter);
 
   // Union of all sizes from every loaded pivot, sorted
   const allSizes = useMemo(() => {
@@ -73,7 +73,7 @@ export default function CatalogView() {
     return sortSizes([...sizeSet]);
   }, [pivots]);
 
-  // cor + sizes + total + optional price
+  // color + sizes + total + optional price
   const colSpan = allSizes.length + 2 + (showPrice ? 1 : 0);
 
   // Global totals across all loaded pivots
@@ -92,13 +92,13 @@ export default function CatalogView() {
 
   // ── search ──────────────────────────────────────────────────────────────────
 
-  const doSearch = useCallback(async (q: string, cor: string, tam: string) => {
-    if (!q.trim() && !cor.trim() && !tam.trim()) { setResults([]); return; }
+  const doSearch = useCallback(async (q: string, color: string, size: string) => {
+    if (!q.trim() && !color.trim() && !size.trim()) { setResults([]); return; }
     setIsSearching(true);
     try {
       const params = new URLSearchParams({ q, limit: "50" });
-      if (cor.trim()) params.set("cor", cor.trim());
-      if (tam.trim()) params.set("tamanho", tam.trim());
+      if (color.trim()) params.set("color", color.trim());
+      if (size.trim()) params.set("size", size.trim());
       const res = await fetch(`/api/catalog?${params}`);
       const json = await res.json();
       setResults(res.ok ? (json.products ?? []) : []);
@@ -113,27 +113,27 @@ export default function CatalogView() {
     setQuery(val);
     queryRef.current = val;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => doSearch(val, corRef.current, tamRef.current), 280);
+    timer.current = setTimeout(() => doSearch(val, colorRef.current, sizeRef.current), 280);
   };
 
-  const handleCorChange = (val: string) => {
-    setCorFilter(val);
-    corRef.current = val;
+  const handleColorChange = (val: string) => {
+    setColorFilter(val);
+    colorRef.current = val;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => doSearch(queryRef.current, val, tamRef.current), 280);
+    timer.current = setTimeout(() => doSearch(queryRef.current, val, sizeRef.current), 280);
   };
 
-  const handleTamanhoChange = (val: string) => {
-    setTamanhoFilter(val);
-    tamRef.current = val;
+  const handleSizeChange = (val: string) => {
+    setSizeFilter(val);
+    sizeRef.current = val;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => doSearch(queryRef.current, corRef.current, val), 280);
+    timer.current = setTimeout(() => doSearch(queryRef.current, colorRef.current, val), 280);
   };
 
   // ── filtered results (client-side minimo filter) ─────────────────────────────
 
   const filteredResults = useMemo(
-    () => results.filter((p) => p.totalEstoque >= minimo),
+    () => results.filter((p) => p.totalStock >= minimo),
     [results, minimo]
   );
 
@@ -331,19 +331,19 @@ export default function CatalogView() {
           </div>
         </div>
 
-        {/* row 2 — cor + tamanho */}
+        {/* row 2 — color + size */}
         <div className="shrink-0 px-3 pb-2 flex gap-2">
           <input
             type="text"
-            value={corFilter}
-            onChange={(e) => handleCorChange(e.target.value)}
+            value={colorFilter}
+            onChange={(e) => handleColorChange(e.target.value)}
             placeholder="Cor"
             className="w-1/2 rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100 transition-all"
           />
           <input
             type="text"
-            value={tamanhoFilter}
-            onChange={(e) => handleTamanhoChange(e.target.value)}
+            value={sizeFilter}
+            onChange={(e) => handleSizeChange(e.target.value)}
             placeholder="Tamanho"
             className="w-1/2 rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 px-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100 transition-all"
           />
@@ -367,7 +367,7 @@ export default function CatalogView() {
 
         {/* results list */}
         <div className="flex-1 overflow-y-auto">
-          {!query && !corFilter && !tamanhoFilter && (
+          {!query && !colorFilter && !sizeFilter && (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center select-none">
               <svg className="mb-3 h-8 w-8 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <circle cx="10.5" cy="10.5" r="6.5" />
@@ -377,7 +377,7 @@ export default function CatalogView() {
             </div>
           )}
 
-          {(query || corFilter || tamanhoFilter) && !isSearching && filteredResults.length === 0 && (
+          {(query || colorFilter || sizeFilter) && !isSearching && filteredResults.length === 0 && (
             <p className="py-10 text-center text-xs text-zinc-400">
               Nenhum resultado
             </p>
@@ -409,11 +409,11 @@ export default function CatalogView() {
                       <div className="flex-1 min-w-0">
                         {/* break-words so long names wrap instead of truncating */}
                         <p className="text-sm font-medium text-zinc-900 leading-snug break-words whitespace-normal">
-                          {p.nome}
+                          {p.name}
                         </p>
                         <p className="text-xs mt-0.5 tabular-nums">
-                          <span className={p.totalEstoque === 0 ? "text-red-400" : "text-zinc-400"}>
-                            {p.totalEstoque} un.
+                          <span className={p.totalStock === 0 ? "text-red-400" : "text-zinc-400"}>
+                            {p.totalStock} un.
                           </span>
                           {p.colorCount > 0 && (
                             <span className="ml-1.5 text-zinc-400">· {p.colorCount} cor.</span>
@@ -571,7 +571,7 @@ export default function CatalogView() {
                               <td colSpan={colSpan} className="px-5 py-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-3 min-w-0">
-                                    <span className="font-semibold text-zinc-800 leading-snug">{product.nome}</span>
+                                    <span className="font-semibold text-zinc-800 leading-snug">{product.name}</span>
                                     {pivot && <span className="flex-none text-xs text-zinc-400 tabular-nums">{pivot.grandTotal} un.</span>}
                                     {state === "loading" && <Spinner className="h-3.5 w-3.5 text-zinc-400" />}
                                   </div>
@@ -597,16 +597,16 @@ export default function CatalogView() {
                                 <td className="px-5 py-2.5 text-xs text-zinc-400 italic border-r border-zinc-100">{pivot.childlessCodigo ?? "sem variações"}</td>
                                 {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
-                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPreco != null ? pivot.childlessPreco.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPrice != null ? pivot.childlessPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             )}
 
                             {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
                               <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
                                 <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
-                                  {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                  {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
                                 </td>
-                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
+                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.color ?? ""}|||${s}`, row.cells[s]?.stock ?? 0))}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
                                 {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{row.rowPrice != null ? row.rowPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
@@ -636,7 +636,7 @@ export default function CatalogView() {
                               <tr><td colSpan={colSpan} className="py-4 text-center"><Spinner className="h-4 w-4 text-zinc-300 mx-auto" /></td></tr>
                             )}
                             {state === "error" && (
-                              <tr><td colSpan={colSpan} className="py-4 text-center text-xs text-zinc-400">Erro ao carregar {product.nome}</td></tr>
+                              <tr><td colSpan={colSpan} className="py-4 text-center text-xs text-zinc-400">Erro ao carregar {product.name}</td></tr>
                             )}
 
                             {pivot?.isChildless && (
@@ -655,7 +655,7 @@ export default function CatalogView() {
                                 </td>
                                 {allSizes.map((s) => <td key={s} className="px-3 py-2.5 text-center text-zinc-200 border-r border-zinc-100">·</td>)}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{pivot.grandTotal}</td>
-                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPreco != null ? pivot.childlessPreco.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
+                                {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{pivot.childlessPrice != null ? pivot.childlessPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>
                             )}
 
@@ -673,10 +673,10 @@ export default function CatalogView() {
                                     )}
                                     {rowIdx > 0 && <span className="w-4 shrink-0" />}
                                     {pivot.parentCodigo && <code className="font-mono text-xs text-zinc-400">{pivot.parentCodigo}</code>}
-                                    {row.cor ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
+                                    {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
                                   </div>
                                 </td>
-                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.cor ?? ""}|||${s}`, row.cells[s]?.estoque ?? 0))}
+                                {allSizes.map((s) => renderDataCell(s, `${product.key}|||${row.color ?? ""}|||${s}`, row.cells[s]?.stock ?? 0))}
                                 <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">{row.total}</td>
                                 {showPrice && <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">{row.rowPrice != null ? row.rowPrice.toFixed(1).replace(".", ",") : <span className="text-zinc-300">—</span>}</td>}
                               </tr>

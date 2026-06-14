@@ -8,11 +8,11 @@ export async function GET(req: NextRequest) {
 
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") ?? "30"), 100);
-  const cor = req.nextUrl.searchParams.get("cor") ?? "";
-  const tamanho = req.nextUrl.searchParams.get("tamanho") ?? "";
+  const color = req.nextUrl.searchParams.get("color") ?? "";
+  const size = req.nextUrl.searchParams.get("size") ?? "";
 
   try {
-    const products = await searchProducts(q, limit, cor, tamanho);
+    const products = await searchProducts(q, limit, color, size);
     return NextResponse.json({ products });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

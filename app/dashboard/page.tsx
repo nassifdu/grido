@@ -141,7 +141,7 @@ export default async function DashboardPage() {
             </a>
             {/* Vendas widget */}
             <a
-              href="/dashboard/vendas"
+              href="/dashboard/sales"
               className="group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm hover:shadow-md hover:border-zinc-300 transition-all"
             >
               {/* Placeholder photo */}

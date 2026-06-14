@@ -6,22 +6,22 @@ import { getSupabase } from "./supabase";
 export interface ProductSummary {
   key: string;        // "p:123" for a parent group, "s:456" for a childless solo
   groupId: number;    // parentId for grouped, id for childless
-  nome: string;
+  name: string;
   variantCount: number;
   colorCount: number;
-  marca: string | null;
-  totalEstoque: number;
+  brand: string | null;
+  totalStock: number;
 }
 
 export interface PivotCell {
   id: number;
   codigo: string | null;
-  estoque: number;
-  preco: number | null;
+  stock: number;
+  price: number | null;
 }
 
 export interface PivotRow {
-  cor: string | null;
+  color: string | null;
   cells: Record<string, PivotCell | null>;
   total: number;
   rowPrice: number | null;
@@ -30,7 +30,7 @@ export interface PivotRow {
 export interface ProductPivot {
   key: string;
   groupId: number;
-  nome: string;
+  name: string;
   sizes: string[];
   hasColors: boolean;
   rows: PivotRow[];
@@ -38,7 +38,7 @@ export interface ProductPivot {
   grandTotal: number;
   isChildless: boolean;
   childlessCodigo?: string | null;
-  childlessPreco?: number | null;
+  childlessPrice?: number | null;
   parentCodigo: string | null;
 }
 
@@ -90,31 +90,31 @@ export function normalizeSize(raw: string): string {
   return s.toUpperCase();
 }
 
-// ── variacao_nome parsing ──────────────────────────────────────────────────────
+// ── variation name parsing ─────────────────────────────────────────────────────
 
-function parseVariacao(vn: string | null): { cor: string | null; tamanho: string | null } {
-  if (!vn) return { cor: null, tamanho: null };
+function parseVariation(vn: string | null): { color: string | null; size: string | null } {
+  if (!vn) return { color: null, size: null };
   const parts = vn.split(";");
-  let cor: string | null = null;
-  let tamanho: string | null = null;
+  let color: string | null = null;
+  let size: string | null = null;
   for (const part of parts) {
     const m = part.match(/^(Cor|Tamanho):(.+)$/i);
     if (!m) continue;
-    if (m[1].toLowerCase() === "cor") cor = m[2].trim();
-    else tamanho = normalizeSize(m[2].trim());
+    if (m[1].toLowerCase() === "cor") color = m[2].trim();
+    else size = normalizeSize(m[2].trim());
   }
-  if (!cor && !tamanho) tamanho = normalizeSize(vn.trim());
-  return { cor, tamanho };
+  if (!color && !size) size = normalizeSize(vn.trim());
+  return { color, size };
 }
 
 // ── group key helpers ──────────────────────────────────────────────────────────
 
 function itemKey(item: TransformedItem): string {
-  return item.idProdutoPai != null ? `p:${item.idProdutoPai}` : `s:${item.id}`;
+  return item.parentId != null ? `p:${item.parentId}` : `s:${item.id}`;
 }
 
 function itemGroupId(item: TransformedItem): number {
-  return item.idProdutoPai ?? item.id;
+  return item.parentId ?? item.id;
 }
 
 // ── public API ─────────────────────────────────────────────────────────────────
@@ -122,15 +122,15 @@ function itemGroupId(item: TransformedItem): number {
 export async function searchProducts(
   query: string,
   limit = 30,
-  corFilter = "",
-  tamanhoFilter = ""
+  colorFilter = "",
+  sizeFilter = ""
 ): Promise<ProductSummary[]> {
   const items = await buildTransformed();
   const q = query.trim().toLowerCase();
-  const cf = corFilter.trim().toLowerCase();
-  const tf = tamanhoFilter.trim().toLowerCase();
+  const cf = colorFilter.trim().toLowerCase();
+  const sf = sizeFilter.trim().toLowerCase();
 
-  type G = { key: string; groupId: number; nome: string; marca: string | null; count: number; totalEstoque: number; colors: Set<string>; tamanhos: Set<string> };
+  type G = { key: string; groupId: number; name: string; brand: string | null; count: number; totalStock: number; colors: Set<string>; sizes: Set<string> };
   const groups = new Map<string, G>();
 
   for (const item of items) {
@@ -139,24 +139,24 @@ export async function searchProducts(
       groups.set(k, {
         key: k,
         groupId: itemGroupId(item),
-        nome: item.nome,
-        marca: item.marca,
+        name: item.name,
+        brand: item.brand,
         count: 0,
-        totalEstoque: 0,
+        totalStock: 0,
         colors: new Set(),
-        tamanhos: new Set(),
+        sizes: new Set(),
       });
     }
     const g = groups.get(k)!;
     g.count++;
-    g.totalEstoque += item.estoque;
-    const { cor, tamanho } = parseVariacao(item.variacao_nome);
-    if (cor) g.colors.add(cor.toLowerCase());
-    if (tamanho) g.tamanhos.add(tamanho.toLowerCase());
+    g.totalStock += item.stock;
+    const { color, size } = parseVariation(item.variationName);
+    if (color) g.colors.add(color.toLowerCase());
+    if (size) g.sizes.add(size.toLowerCase());
   }
 
   const sorted = [...groups.values()].sort((a, b) =>
-    a.nome.localeCompare(b.nome, "pt-BR")
+    a.name.localeCompare(b.name, "pt-BR")
   );
 
   // Token search: every whitespace-separated token must appear in the name
@@ -164,24 +164,24 @@ export async function searchProducts(
 
   const results: ProductSummary[] = [];
   for (const g of sorted) {
-    const name = g.nome.toLowerCase();
+    const name = g.name.toLowerCase();
 
     if (tokens.length > 0 && tokens.some((t) => !name.includes(t))) continue;
 
-    // Cor filter: name includes cf OR any variation cor includes cf
+    // Color filter: name includes cf OR any variation color includes cf
     if (cf && !name.includes(cf) && ![...g.colors].some((c) => c.includes(cf))) continue;
 
-    // Tamanho filter: name includes tf OR any variation tamanho includes tf
-    if (tf && !name.includes(tf) && ![...g.tamanhos].some((t) => t.includes(tf))) continue;
+    // Size filter: name includes sf OR any variation size includes sf
+    if (sf && !name.includes(sf) && ![...g.sizes].some((t) => t.includes(sf))) continue;
 
     results.push({
       key: g.key,
       groupId: g.groupId,
-      nome: g.nome,
+      name: g.name,
       variantCount: g.count,
       colorCount: g.colors.size,
-      marca: g.marca,
-      totalEstoque: g.totalEstoque,
+      brand: g.brand,
+      totalStock: g.totalStock,
     });
     if (results.length >= limit) break;
   }
@@ -193,15 +193,15 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
 
   const group = items.filter(
     (item) =>
-      item.idProdutoPai === gId ||
-      (item.idProdutoPai === null && item.id === gId)
+      item.parentId === gId ||
+      (item.parentId === null && item.id === gId)
   );
 
   if (group.length === 0) return null;
 
-  const nome = group[0].nome;
-  const key = group[0].idProdutoPai != null ? `p:${gId}` : `s:${gId}`;
-  const isChildless = group.length === 1 && group[0].idProdutoPai === null;
+  const name = group[0].name;
+  const key = group[0].parentId != null ? `p:${gId}` : `s:${gId}`;
+  const isChildless = group.length === 1 && group[0].parentId === null;
 
   // Fetch parent product's codigo from bling_produtos (cached via buildTransformed is server-only)
   const { data: parentRow } = await getSupabase()
@@ -217,55 +217,55 @@ export async function getProductPivot(gId: number): Promise<ProductPivot | null>
     return {
       key,
       groupId: gId,
-      nome,
+      name,
       sizes: [],
       hasColors: false,
       rows: [],
       totals: {},
-      grandTotal: group[0].estoque,
+      grandTotal: group[0].stock,
       isChildless: true,
       childlessCodigo: group[0].codigo,
-      childlessPreco: group[0].preco ?? null,
+      childlessPrice: group[0].price ?? null,
       parentCodigo,
     };
   }
 
-  const parsed = group.map((item) => ({ ...item, ...parseVariacao(item.variacao_nome) }));
+  const parsed = group.map((item) => ({ ...item, ...parseVariation(item.variationName) }));
 
-  const hasColors = parsed.some((p) => p.cor !== null);
-  const allSizes = [...new Set(parsed.map((p) => p.tamanho).filter(Boolean) as string[])];
+  const hasColors = parsed.some((p) => p.color !== null);
+  const allSizes = [...new Set(parsed.map((p) => p.size).filter(Boolean) as string[])];
   const sizes = sortSizes(allSizes);
 
   const rowMap = new Map<string | null, PivotRow>();
 
   for (const item of parsed) {
-    const cor = item.cor ?? null;
-    if (!rowMap.has(cor)) {
-      rowMap.set(cor, {
-        cor,
+    const color = item.color ?? null;
+    if (!rowMap.has(color)) {
+      rowMap.set(color, {
+        color,
         cells: Object.fromEntries(sizes.map((s) => [s, null])),
         total: 0,
         rowPrice: null,
       });
     }
-    const row = rowMap.get(cor)!;
-    if (item.tamanho) {
-      row.cells[item.tamanho] = { id: item.id, codigo: item.codigo, estoque: item.estoque, preco: item.preco ?? null };
+    const row = rowMap.get(color)!;
+    if (item.size) {
+      row.cells[item.size] = { id: item.id, codigo: item.codigo, stock: item.stock, price: item.price ?? null };
     }
-    if (row.rowPrice === null && item.preco != null) row.rowPrice = item.preco;
-    row.total += item.estoque;
+    if (row.rowPrice === null && item.price != null) row.rowPrice = item.price;
+    row.total += item.stock;
   }
 
   const rows = [...rowMap.values()];
   const totals: Record<string, number> = {};
   for (const s of sizes) {
-    totals[s] = rows.reduce((sum, r) => sum + (r.cells[s]?.estoque ?? 0), 0);
+    totals[s] = rows.reduce((sum, r) => sum + (r.cells[s]?.stock ?? 0), 0);
   }
 
   return {
     key,
     groupId: gId,
-    nome,
+    name,
     sizes,
     hasColors,
     rows,
