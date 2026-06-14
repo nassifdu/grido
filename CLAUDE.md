@@ -10,6 +10,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Pin multiple pivot widgets simultaneously on the dashboard
 - Auth is handled via Bling OAuth + encrypted token storage
 
+## Language Standards
+
+- **Backend** (API routes, lib utilities): English (e.g., `Catalog`, `searchProducts`, comments, variable names)
+- **Frontend** (UI components, pages): Portuguese (e.g., `Estoque`, `Subtotal`, user-facing labels and strings)
+- **Database**: Portuguese table/column names (e.g., `bling_produtos`, `bling_variacoes`, `id_produto_pai`)
+
+Keep backend logic language-agnostic; internationalize UI strings as the product scales.
+
 ## Getting Started
 
 **Requirements:** Node.js 18+
