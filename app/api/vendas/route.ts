@@ -118,8 +118,8 @@ export async function GET(req: NextRequest) {
 
       if (res.status === 404) break;
       if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Bling pedidos/vendas: HTTP ${res.status} — ${body.slice(0, 200)}`);
+        // blingFetch already consumed the body for logging — don't read it again
+        throw new Error(`Bling pedidos/vendas: HTTP ${res.status}`);
       }
 
       const json = await res.json();
