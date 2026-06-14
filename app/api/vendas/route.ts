@@ -3,7 +3,14 @@ import { getSession } from "@/lib/session";
 import { blingFetch } from "@/lib/bling";
 import { buildTransformed } from "@/lib/transform";
 
-// ── size sorting (mirrored from lib/catalog.ts) ───────────────────────────────
+const DELAY_MS = 350; // ~3 req/s
+const CONCURRENCY = 3;
+
+function delay(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+// ── size helpers (mirrored from lib/catalog.ts) ───────────────────────────────
 
 const LETTER_SIZES = [
   "RN", "PP", "P", "M", "G", "GG", "GGG", "XGG", "XG",
@@ -47,7 +54,7 @@ function parseVariacaoNome(vn: string | null): { cor: string | null; tamanho: st
   return { cor, tamanho };
 }
 
-// ── public types ──────────────────────────────────────────────────────────────
+// ── types ─────────────────────────────────────────────────────────────────────
 
 export interface VendasProductSummary {
   key: string;
@@ -71,8 +78,6 @@ export interface VendasPivot {
   grandTotal: number;
 }
 
-// ── Bling API types ───────────────────────────────────────────────────────────
-
 interface BlingOrderItem {
   produto?: { id?: number; codigo?: string; descricao?: string };
   quantidade?: number;
@@ -84,6 +89,92 @@ interface BlingOrder {
   itens?: BlingOrderItem[];
 }
 
+// ── fetch helpers ─────────────────────────────────────────────────────────────
+
+async function fetchWithRetry(
+  userId: string,
+  path: string,
+  retries = 2
+): Promise<Response | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await blingFetch(userId, path);
+    if (res.status === 429) {
+      await delay(1000 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+  return null;
+}
+
+/** Fetch all order summaries (IDs) for the given date range. */
+async function fetchOrderIds(userId: string, from: string, to: string): Promise<number[]> {
+  const ids: number[] = [];
+  let page = 1;
+
+  while (true) {
+    const params = new URLSearchParams({
+      pagina: String(page),
+      limite: "100",
+      dataEmissaoInicial: from,
+      dataEmissaoFinal: to,
+    });
+
+    const res = await fetchWithRetry(userId, `/pedidos/vendas?${params}`);
+    if (!res) throw new Error("Bling pedidos/vendas: esgotou tentativas (429)");
+    if (res.status === 404) break;
+    if (!res.ok) throw new Error(`Bling pedidos/vendas: HTTP ${res.status}`);
+
+    const json = await res.json();
+    const page_data: BlingOrder[] = Array.isArray(json.data) ? json.data : [];
+
+    // Check whether the list already carries itens (some Bling accounts do)
+    const listHasItems = page_data.some((o) => (o.itens?.length ?? 0) > 0);
+    if (listHasItems) {
+      console.log("[vendas] list endpoint includes itens — using directly");
+      // Return sentinel value so caller knows items are embedded
+      return page_data.map((o) => -(o.id ?? 0)); // negative = "already full order"
+    }
+
+    for (const o of page_data) {
+      if (o.id) ids.push(o.id);
+    }
+
+    console.log(`[vendas] page ${page}: ${page_data.length} orders (total ids so far: ${ids.length})`);
+
+    if (page_data.length < 100) break;
+    page++;
+    await delay(DELAY_MS);
+  }
+
+  return ids;
+}
+
+/** Fetch full order details (with itens) for a batch of IDs. */
+async function fetchOrderDetails(userId: string, ids: number[]): Promise<BlingOrder[]> {
+  const orders: BlingOrder[] = [];
+
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const batch = ids.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(
+      batch.map((id) => fetchWithRetry(userId, `/pedidos/vendas/${id}`))
+    );
+
+    for (const result of settled) {
+      if (result.status === "rejected") continue;
+      const res = result.value;
+      if (!res || !res.ok) continue;
+      const json = await res.json();
+      const order: BlingOrder = json.data ?? json;
+      if (order?.id) orders.push(order);
+    }
+
+    if (i + CONCURRENCY < ids.length) await delay(DELAY_MS);
+  }
+
+  return orders;
+}
+
 // ── route ─────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -92,52 +183,57 @@ export async function GET(req: NextRequest) {
 
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
-
   if (!from || !to) {
     return NextResponse.json({ error: "Parâmetros from e to são obrigatórios" }, { status: 400 });
   }
 
+  console.log(`[vendas] GET from=${from} to=${to}`);
+
   try {
-    // Load local catalog for variation matching (30s in-memory cache)
-    const items = await buildTransformed();
-    const varById = new Map(items.map((item) => [item.id, item]));
+    // ── 1. Build local catalog lookup (ID → item, codigo → item) ─────────────
+    const catalogItems = await buildTransformed();
+    const varById = new Map(catalogItems.map((it) => [it.id, it]));
+    const varByCodigo = new Map(
+      catalogItems.filter((it) => it.codigo).map((it) => [it.codigo!, it])
+    );
+    console.log(`[vendas] catalog: ${catalogItems.length} items loaded`);
 
-    // Paginate through Bling pedidos/vendas
-    const orders: BlingOrder[] = [];
-    let page = 1;
+    // ── 2. Fetch order IDs (or full orders if list includes itens) ────────────
+    const rawIds = await fetchOrderIds(userId, from, to);
+    const listHadItems = rawIds.length > 0 && rawIds[0] < 0;
 
-    while (true) {
-      const params = new URLSearchParams({
-        pagina: String(page),
-        limite: "100",
-        dataEmissaoInicial: from,
-        dataEmissaoFinal: to,
-      });
+    let orders: BlingOrder[];
 
-      const res = await blingFetch(userId, `/pedidos/vendas?${params}`);
-
-      if (res.status === 404) break;
-      if (res.status === 429) {
-        // Rate limited — wait 1s and retry the same page
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
+    if (listHadItems) {
+      // Re-fetch page 1 to get the embedded orders
+      // (fetchOrderIds returned sentinel negatives — redo with real fetch)
+      orders = [];
+      let page = 1;
+      while (true) {
+        const params = new URLSearchParams({
+          pagina: String(page),
+          limite: "100",
+          dataEmissaoInicial: from,
+          dataEmissaoFinal: to,
+        });
+        const res = await fetchWithRetry(userId, `/pedidos/vendas?${params}`);
+        if (!res || !res.ok || res.status === 404) break;
+        const json = await res.json();
+        const page_data: BlingOrder[] = Array.isArray(json.data) ? json.data : [];
+        orders.push(...page_data);
+        if (page_data.length < 100) break;
+        page++;
+        await delay(DELAY_MS);
       }
-      if (!res.ok) {
-        // blingFetch already consumed the body for logging — don't read it again
-        throw new Error(`Bling pedidos/vendas: HTTP ${res.status}`);
-      }
-
-      const json = await res.json();
-      const pageOrders: BlingOrder[] = Array.isArray(json.data) ? json.data : [];
-      orders.push(...pageOrders);
-
-      if (pageOrders.length < 100) break;
-      page++;
-      // ~3 req/s limit
-      await new Promise((r) => setTimeout(r, 350));
+    } else {
+      const positiveIds = rawIds.filter((id) => id > 0);
+      console.log(`[vendas] fetching ${positiveIds.length} individual orders…`);
+      orders = await fetchOrderDetails(userId, positiveIds);
     }
 
-    // Aggregate sales by product group
+    console.log(`[vendas] ${orders.length} orders retrieved`);
+
+    // ── 3. Aggregate items ────────────────────────────────────────────────────
     type CellAcc = { qty: number; valor: number };
     type GroupAcc = {
       nome: string;
@@ -148,17 +244,31 @@ export async function GET(req: NextRequest) {
     };
 
     const groups = new Map<string, GroupAcc>();
+    let totalItems = 0;
+    let matchedItems = 0;
+    let unmatchedSample: string[] = [];
 
     for (const order of orders) {
       for (const item of order.itens ?? []) {
+        totalItems++;
         const prodId = item.produto?.id;
-        if (!prodId) continue;
-
-        const variation = varById.get(prodId);
-        if (!variation) continue;
-
+        const prodCodigo = item.produto?.codigo;
         const qty = item.quantidade ?? 0;
         if (qty <= 0) continue;
+
+        // Match against local catalog: by ID first, then by código
+        const variation =
+          (prodId ? varById.get(prodId) : undefined) ??
+          (prodCodigo ? varByCodigo.get(prodCodigo) : undefined);
+
+        if (!variation) {
+          if (unmatchedSample.length < 5) {
+            unmatchedSample.push(`id=${prodId} codigo=${prodCodigo} desc="${item.produto?.descricao}"`);
+          }
+          continue;
+        }
+
+        matchedItems++;
         const valor = (item.valor ?? 0) * qty;
 
         const key =
@@ -167,13 +277,7 @@ export async function GET(req: NextRequest) {
             : `s:${variation.id}`;
 
         if (!groups.has(key)) {
-          groups.set(key, {
-            nome: variation.nome,
-            key,
-            corMap: new Map(),
-            totalVendido: 0,
-            valorTotal: 0,
-          });
+          groups.set(key, { nome: variation.nome, key, corMap: new Map(), totalVendido: 0, valorTotal: 0 });
         }
 
         const group = groups.get(key)!;
@@ -191,7 +295,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Build product summaries and pivots
+    console.log(
+      `[vendas] items: total=${totalItems} matched=${matchedItems} unmatched=${totalItems - matchedItems}`
+    );
+    if (unmatchedSample.length > 0) {
+      console.log("[vendas] unmatched sample:", unmatchedSample);
+    }
+
+    // ── 4. Build response ─────────────────────────────────────────────────────
     const products: VendasProductSummary[] = [];
     const pivots: Record<string, VendasPivot> = {};
 
@@ -235,7 +346,19 @@ export async function GET(req: NextRequest) {
 
     products.sort((a, b) => b.totalVendido - a.totalVendido);
 
-    return NextResponse.json({ products, pivots });
+    // _debug is returned so the browser console can show diagnostics
+    return NextResponse.json({
+      products,
+      pivots,
+      _debug: {
+        ordersCount: orders.length,
+        totalItems,
+        matchedItems,
+        unmatchedItems: totalItems - matchedItems,
+        unmatchedSample,
+        catalogSize: catalogItems.length,
+      },
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro desconhecido";
     console.error("[api/vendas]", msg);
