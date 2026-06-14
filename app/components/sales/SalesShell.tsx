@@ -7,6 +7,7 @@ import { Fragment, useState, useMemo, useRef } from "react";
 interface SalesProductSummary {
   key: string;
   name: string;
+  code: string | null;
   totalSold: number;
   totalValor: number;
   colorCount: number;
@@ -18,6 +19,7 @@ interface SalesPivotRow {
   cells: Record<string, number>;
   total: number;
   totalValor: number;
+  rowPrice: number | null;
 }
 
 interface SalesPivot {
@@ -122,6 +124,10 @@ function fmtBRL(v: number): string {
   return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function fmtPrice(v: number): string {
+  return v.toFixed(1).replace(".", ",");
+}
+
 // ── CSV parser ─────────────────────────────────────────────────────────────────
 
 function parseCSVLine(line: string): string[] {
@@ -163,8 +169,10 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
 
   type GroupAcc = {
     name: string;
+    code: string | null;
     colorMap: Map<string | null, Map<string, number>>;
     valorByColor: Map<string | null, number>;
+    rowPriceByColor: Map<string | null, number | null>;
     totalSold: number;
     totalValor: number;
   };
@@ -179,6 +187,8 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     const qty = Math.round(parseFloat((fields[3] ?? "0").replace(',', '.')));
     if (qty <= 0 || !rawProduct) continue;
 
+    const codigo = fields[2]?.trim() || null;
+    const precoMedio = parseBRL(fields[4] ?? "0");
     const valor = parseBRL(fields[5] ?? "0");
 
     const variationName = extractVariationFromName(rawProduct);
@@ -192,21 +202,33 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     if (!baseName) continue;
 
     if (!groups.has(baseName)) {
-      groups.set(baseName, { name: baseName, colorMap: new Map(), valorByColor: new Map(), totalSold: 0, totalValor: 0 });
+      groups.set(baseName, {
+        name: baseName,
+        code: null,
+        colorMap: new Map(),
+        valorByColor: new Map(),
+        rowPriceByColor: new Map(),
+        totalSold: 0,
+        totalValor: 0,
+      });
     }
 
     const group = groups.get(baseName)!;
     group.totalSold += qty;
     group.totalValor += valor;
+    if (!group.code && codigo) group.code = codigo;
 
     const sizeKey = size ?? "único";
     const colorKey = color ?? null;
 
     if (!group.colorMap.has(colorKey)) group.colorMap.set(colorKey, new Map());
-    const sizeMap = group.colorMap.get(colorKey)!;
-    sizeMap.set(sizeKey, (sizeMap.get(sizeKey) ?? 0) + qty);
+    group.colorMap.get(colorKey)!.set(sizeKey, (group.colorMap.get(colorKey)!.get(sizeKey) ?? 0) + qty);
 
     group.valorByColor.set(colorKey, (group.valorByColor.get(colorKey) ?? 0) + valor);
+
+    if (!group.rowPriceByColor.has(colorKey) || group.rowPriceByColor.get(colorKey) === null) {
+      group.rowPriceByColor.set(colorKey, precoMedio > 0 ? precoMedio : null);
+    }
   }
 
   const products: SalesProductSummary[] = [];
@@ -227,8 +249,13 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
         cells[s] = qty;
         rowTotal += qty;
       }
-      const totalValor = group.valorByColor.get(color) ?? 0;
-      rows.push({ color, cells, total: rowTotal, totalValor });
+      rows.push({
+        color,
+        cells,
+        total: rowTotal,
+        totalValor: group.valorByColor.get(color) ?? 0,
+        rowPrice: group.rowPriceByColor.get(color) ?? null,
+      });
     }
 
     const totals: Record<string, number> = {};
@@ -239,7 +266,7 @@ function processCSV(text: string): { products: SalesProductSummary[]; pivots: Re
     const colorCount = [...group.colorMap.keys()].filter((c) => c !== null).length;
     const variantCount = [...group.colorMap.values()].reduce((sum, m) => sum + m.size, 0);
 
-    products.push({ key, name: group.name, totalSold: group.totalSold, totalValor: group.totalValor, colorCount, variantCount });
+    products.push({ key, name: group.name, code: group.code, totalSold: group.totalSold, totalValor: group.totalValor, colorCount, variantCount });
     pivots[key] = { sizes, rows, totals, grandTotal: group.totalSold, grandValor: group.totalValor };
   }
 
@@ -253,6 +280,7 @@ export default function SalesShell() {
   const [products, setProducts] = useState<SalesProductSummary[]>([]);
   const [pivots, setPivots] = useState<Record<string, SalesPivot>>({});
   const [selected, setSelected] = useState<SalesProductSummary[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
   const [showZeros, setShowZeros] = useState(true);
   const [showPrice, setShowPrice] = useState(false);
@@ -270,6 +298,7 @@ export default function SalesShell() {
         setProducts(p);
         setPivots(pv);
         setSelected([]);
+        setSearchQuery("");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Erro ao processar arquivo");
       }
@@ -296,6 +325,16 @@ export default function SalesShell() {
       return [...prev, product];
     });
   }
+
+  // Token search over the in-memory product list
+  const filteredProducts = useMemo(() => {
+    const tokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return products;
+    return products.filter((p) => {
+      const name = p.name.toLowerCase();
+      return tokens.every((t) => name.includes(t));
+    });
+  }, [products, searchQuery]);
 
   const allSizes = useMemo(() => {
     const sizeSet = new Set<string>();
@@ -327,8 +366,8 @@ export default function SalesShell() {
     const qty = row.cells[s] ?? 0;
     if (qty === 0) {
       return showZeros
-        ? <span className="text-zinc-200">·</span>
-        : null;
+        ? <span className="text-red-400">0</span>
+        : <span className="opacity-30">·</span>;
     }
     return <span className={soldClass(qty)}>{qty}</span>;
   }
@@ -410,6 +449,28 @@ export default function SalesShell() {
             </div>
           )}
 
+          {/* Search bar */}
+          {products.length > 0 && (
+            <div className="shrink-0 px-3 pt-3 pb-2">
+              <div className="relative">
+                <svg
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400"
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path strokeLinecap="round" d="M16.5 16.5L21 21" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar produto…"
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 pl-9 pr-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100 transition-all"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Product list */}
           <div className="flex-1 overflow-y-auto">
             {products.length === 0 ? (
@@ -419,9 +480,11 @@ export default function SalesShell() {
                 </svg>
                 <p className="text-xs text-zinc-400">Carregue um relatório para começar</p>
               </div>
+            ) : filteredProducts.length === 0 ? (
+              <p className="py-10 text-center text-xs text-zinc-400">Nenhum resultado</p>
             ) : (
               <ul className="divide-y divide-zinc-50 py-1">
-                {products.map((p) => {
+                {filteredProducts.map((p) => {
                   const isSelected = selected.some((s) => s.key === p.key);
                   return (
                     <li key={p.key}>
@@ -467,14 +530,18 @@ export default function SalesShell() {
             <div className="shrink-0 border-t border-zinc-100 px-3 py-2 bg-zinc-50 flex items-center justify-between gap-2">
               <p className="text-xs text-zinc-400">
                 {selected.length === 0
-                  ? `${products.length} produto${products.length !== 1 ? "s" : ""}`
+                  ? `${filteredProducts.length} produto${filteredProducts.length !== 1 ? "s" : ""}`
                   : selected.length === 1
                   ? "1 selecionado"
                   : `${selected.length} selecionados`}
               </p>
-              {products.some((p) => !selected.some((s) => s.key === p.key)) && (
+              {filteredProducts.some((p) => !selected.some((s) => s.key === p.key)) && (
                 <button
-                  onClick={() => setSelected([...products])}
+                  onClick={() => setSelected((prev) => {
+                    const existing = new Set(prev.map((p) => p.key));
+                    const toAdd = filteredProducts.filter((p) => !existing.has(p.key));
+                    return [...prev, ...toAdd];
+                  })}
                   className="shrink-0 rounded-full border border-zinc-300 bg-white px-2.5 py-0.5 text-xs text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 transition-colors"
                 >
                   Tudo
@@ -528,8 +595,8 @@ export default function SalesShell() {
                     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showZeros ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                   >
                     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <circle cx="12" cy="12" r="3" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h1m16 0h1M12 3v1m0 16v1" />
+                      <ellipse cx="12" cy="12" rx="5.5" ry="7.5" />
+                      <path strokeLinecap="round" d="M8 17l8-10" />
                     </svg>
                     Zeros
                   </button>
@@ -537,9 +604,7 @@ export default function SalesShell() {
                     onClick={() => setShowPrice((v) => !v)}
                     className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${showPrice ? "bg-white shadow-sm text-zinc-700" : "text-zinc-500 hover:bg-zinc-200/70"}`}
                   >
-                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33" />
-                    </svg>
+                    <span className="text-[11px] font-semibold leading-none">R$</span>
                     Preço
                   </button>
                 </div>
@@ -562,19 +627,19 @@ export default function SalesShell() {
                     <thead>
                       <tr className="border-b-2 border-zinc-200 bg-zinc-50">
                         <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
-                          Cor
+                          {viewMode === "flat" ? "Variação" : "Cor"}
                         </th>
                         {allSizes.map((s) => (
                           <th key={s} className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
                             {s}
                           </th>
                         ))}
-                        <th className={`px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap ${showPrice ? "border-r border-zinc-200" : ""}`}>
+                        <th className="px-5 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
                           Total
                         </th>
                         {showPrice && (
-                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
-                            Valor
+                          <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-l border-zinc-200">
+                            R$
                           </th>
                         )}
                       </tr>
@@ -593,7 +658,7 @@ export default function SalesShell() {
                                       <span className="font-semibold text-zinc-800 leading-snug">{product.name}</span>
                                       {pivot && (
                                         <span className="flex-none text-xs text-zinc-400 tabular-nums">
-                                          {pivot.grandTotal} un. vendidos
+                                          {pivot.grandTotal} un.
                                           {showPrice && ` · R$ ${fmtBRL(pivot.grandValor)}`}
                                         </span>
                                       )}
@@ -622,12 +687,14 @@ export default function SalesShell() {
                                       {renderDataCell(s, row)}
                                     </td>
                                   ))}
-                                  <td className={`px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
+                                  <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
                                     {row.total}
                                   </td>
                                   {showPrice && (
-                                    <td className="px-5 py-2.5 text-right text-zinc-600 tabular-nums text-xs">
-                                      {fmtBRL(row.totalValor)}
+                                    <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">
+                                      {row.rowPrice != null
+                                        ? fmtPrice(row.rowPrice)
+                                        : <span className="text-zinc-300">—</span>}
                                     </td>
                                   )}
                                 </tr>
@@ -637,27 +704,31 @@ export default function SalesShell() {
                         })
                       ) : (
                         // Flat view
-                        selected.map((product, productIdx) => {
+                        selected.map((product) => {
                           const pivot = pivots[product.key];
                           return pivot?.rows.map((row, rowIdx) => (
                             <tr
                               key={`${product.key}-${rowIdx}`}
-                              className={`hover:bg-zinc-50/70 transition-colors border-b border-zinc-100 ${productIdx > 0 && rowIdx === 0 ? "border-t-2 border-zinc-200" : ""}`}
+                              className={`hover:bg-zinc-50/70 transition-colors border-b border-zinc-100 ${rowIdx === 0 ? "border-t-2 border-zinc-200" : ""}`}
                             >
                               <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
                                 <div className="flex items-center gap-2">
-                                  {rowIdx === 0 && (
+                                  {rowIdx === 0 ? (
                                     <button
                                       onClick={() => toggleProduct(product)}
                                       aria-label="Remover produto"
-                                      className="flex-none rounded-md p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                      className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                                     >
                                       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                       </svg>
                                     </button>
+                                  ) : (
+                                    <span className="w-4 shrink-0" />
                                   )}
-                                  {rowIdx > 0 && <span className="w-4 shrink-0" />}
+                                  {product.code && (
+                                    <code className="font-mono text-xs text-zinc-400">{product.code}</code>
+                                  )}
                                   {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
                                 </div>
                               </td>
@@ -666,12 +737,14 @@ export default function SalesShell() {
                                   {renderDataCell(s, row)}
                                 </td>
                               ))}
-                              <td className={`px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
+                              <td className="px-5 py-2.5 text-center font-semibold text-zinc-800 tabular-nums">
                                 {row.total}
                               </td>
                               {showPrice && (
-                                <td className="px-5 py-2.5 text-right text-zinc-600 tabular-nums text-xs">
-                                  {fmtBRL(row.totalValor)}
+                                <td className="px-4 py-2.5 text-center tabular-nums text-zinc-500 border-l border-zinc-200">
+                                  {row.rowPrice != null
+                                    ? fmtPrice(row.rowPrice)
+                                    : <span className="text-zinc-300">—</span>}
                                 </td>
                               )}
                             </tr>
@@ -681,22 +754,18 @@ export default function SalesShell() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-zinc-300 bg-zinc-100">
-                        <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap border-r border-zinc-100">
+                        <td className="px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 whitespace-nowrap">
                           Total
                         </td>
                         {allSizes.map((s) => (
-                          <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums border-r border-zinc-100">
+                          <td key={s} className="px-3 py-3 text-center text-xs font-bold text-zinc-700 tabular-nums">
                             {globalTotals.bySize[s] ?? 0}
                           </td>
                         ))}
-                        <td className={`px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums ${showPrice ? "border-r border-zinc-100" : ""}`}>
+                        <td className="px-5 py-3 text-center text-sm font-black text-zinc-900 tabular-nums">
                           {globalTotals.grand}
                         </td>
-                        {showPrice && (
-                          <td className="px-5 py-3 text-right text-sm font-bold text-zinc-700 tabular-nums">
-                            {fmtBRL(globalTotals.grandValor)}
-                          </td>
-                        )}
+                        {showPrice && <td className="px-4 py-3 border-l border-zinc-300" />}
                       </tr>
                     </tfoot>
                   </table>
