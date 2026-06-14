@@ -309,6 +309,12 @@ export default function InconsistenciesShell() {
               <span className="rounded-md px-2.5 py-1.5 font-medium text-zinc-900 bg-zinc-100">
                 Inconsistências
               </span>
+              <a
+                href="/dashboard/vendas"
+                className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+              >
+                Vendas
+              </a>
             </nav>
           </div>
           <div className="flex items-center gap-3 shrink-0">
