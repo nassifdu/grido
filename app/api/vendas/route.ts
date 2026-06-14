@@ -117,6 +117,11 @@ export async function GET(req: NextRequest) {
       const res = await blingFetch(userId, `/pedidos/vendas?${params}`);
 
       if (res.status === 404) break;
+      if (res.status === 429) {
+        // Rate limited — wait 1s and retry the same page
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
       if (!res.ok) {
         // blingFetch already consumed the body for logging — don't read it again
         throw new Error(`Bling pedidos/vendas: HTTP ${res.status}`);
@@ -128,6 +133,8 @@ export async function GET(req: NextRequest) {
 
       if (pageOrders.length < 100) break;
       page++;
+      // ~3 req/s limit
+      await new Promise((r) => setTimeout(r, 350));
     }
 
     // Aggregate sales by product group
