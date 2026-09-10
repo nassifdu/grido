@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: var(--font-raveo), sans-serif;
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  table thead {
+    display: table-header-group;
+  }
+
+  table tfoot {
+    display: table-footer-group;
+  }
+
+  table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
