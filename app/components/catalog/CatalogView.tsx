@@ -22,6 +22,16 @@ function sortSizes(sizes: string[]): string[] {
   });
 }
 
+function getProductCode(product: ProductSummary, pivots: Map<string, PivotState>): string {
+  const state = pivots.get(product.key);
+  if (!state || state === "loading" || state === "error") return "";
+  return (state.isChildless ? state.childlessCodigo : state.parentCodigo) ?? "";
+}
+
+function sortRowsByColor(rows: ProductPivot["rows"]): ProductPivot["rows"] {
+  return [...rows].sort((a, b) => (a.color ?? "").localeCompare(b.color ?? "", "pt-BR"));
+}
+
 function stockClass(val: number): string {
   if (val === 0) return "text-zinc-300";
   if (val >= 10) return "text-emerald-700 font-medium";
@@ -75,6 +85,15 @@ export default function CatalogView() {
 
   // color + sizes + total + optional price
   const colSpan = allSizes.length + 2 + (showPrice ? 1 : 0);
+
+  // Selected products ordered alphabetically by product code (used in both views)
+  const sortedSelected = useMemo(
+    () =>
+      [...selected].sort((a, b) =>
+        getProductCode(a, pivots).localeCompare(getProductCode(b, pivots), "pt-BR", { numeric: true })
+      ),
+    [selected, pivots]
+  );
 
   // Global totals across all loaded pivots
   const globalTotals = useMemo(() => {
@@ -571,7 +590,7 @@ export default function CatalogView() {
                 </thead>
                 <tbody>
                   {viewMode === "grouped"
-                    ? selected.map((product, productIdx) => {
+                    ? sortedSelected.map((product, productIdx) => {
                         const state = pivots.get(product.key);
                         const pivot = state && state !== "loading" && state !== "error" ? state : null;
                         return (
@@ -612,7 +631,7 @@ export default function CatalogView() {
                               </tr>
                             )}
 
-                            {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
+                            {pivot && !pivot.isChildless && sortRowsByColor(pivot.rows).map((row, rowIdx) => (
                               <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
                                 <td className="px-5 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
                                   {row.color ?? <span className="text-zinc-400 italic text-xs">sem cor</span>}
@@ -637,7 +656,7 @@ export default function CatalogView() {
                           </Fragment>
                         );
                       })
-                    : selected.map((product) => {
+                    : sortedSelected.map((product) => {
                         const state = pivots.get(product.key);
                         const pivot = state && state !== "loading" && state !== "error" ? state : null;
                         return (
@@ -670,7 +689,7 @@ export default function CatalogView() {
                               </tr>
                             )}
 
-                            {pivot && !pivot.isChildless && pivot.rows.map((row, rowIdx) => (
+                            {pivot && !pivot.isChildless && sortRowsByColor(pivot.rows).map((row, rowIdx) => (
                               <tr key={rowIdx} className="hover:bg-zinc-50/70 transition-colors border-b border-zinc-100">
                                 <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
                                   <div className="flex items-center gap-2">
