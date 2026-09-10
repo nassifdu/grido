@@ -40,10 +40,6 @@ body {
     display: table-header-group;
   }
 
-  table tfoot {
-    display: table-footer-group;
-  }
-
   table tr {
     break-inside: avoid;
     page-break-inside: avoid;
