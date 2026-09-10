@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const credentials = Buffer.from(`${BLING_CLIENT_ID}:${BLING_CLIENT_SECRET}`).toString("base64");
 
   // Exchange code for tokens
-  const tokenRes = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+  const tokenRes = await fetch("https://api.bling.com.br/Api/v3/oauth/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",

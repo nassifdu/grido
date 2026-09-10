@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabase";
 import { encrypt, decrypt } from "./crypto";
 
-const BLING_BASE = "https://www.bling.com.br/Api/v3";
+const BLING_BASE = "https://api.bling.com.br/Api/v3";
 
 export async function getBlingTokens(blingUserId: string) {
   const { data, error } = await getSupabase()
