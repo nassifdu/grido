@@ -225,7 +225,7 @@ export default function CatalogView() {
 
         {/* Top-left: Star */}
         <button onClick={(e) => { e.stopPropagation(); toggleStar(cellKey); }} title="Destacar"
-          className={`absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          className={`print:hidden absolute top-0.5 left-0.5 rounded transition-opacity ${isStarred ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
           <svg className="h-3 w-3 text-amber-500" viewBox="0 0 24 24" fill={isStarred ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2}>
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
@@ -242,7 +242,7 @@ export default function CatalogView() {
           </button>
         ) : !isAnnotating && (
           <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "incoming", undefined); }} title="Registrar chegada"
-            className="absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            className="print:hidden absolute top-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             <svg className="h-3 w-3 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 4v11M8 11l4 4 4-4M5 19h14" />
             </svg>
@@ -261,7 +261,7 @@ export default function CatalogView() {
           </button>
         ) : !isAnnotating && (
           <button onClick={(e) => { e.stopPropagation(); openAnnotation(cellKey, "toBuy", undefined); }} title="Registrar compra"
-            className="absolute bottom-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+            className="print:hidden absolute bottom-0.5 right-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
             <svg className="h-3 w-3 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7v10M14.5 9.5C14 8.5 13.1 8 12 8c-1.4 0-2.5.7-2.5 1.8 0 1.1.9 1.6 2.5 2.1s2.5 1.1 2.5 2.3c0 1.2-1.1 2-2.5 2s-2.5-.8-2.5-2" />
@@ -303,10 +303,10 @@ export default function CatalogView() {
   // ── render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <aside className="w-72 shrink-0 flex flex-col border-r border-zinc-200 bg-white overflow-hidden">
+      <aside className="print:hidden w-72 shrink-0 flex flex-col border-r border-zinc-200 bg-white overflow-hidden">
 
         {/* row 1 — main search */}
         <div className="shrink-0 px-3 pt-3 pb-2">
@@ -454,7 +454,7 @@ export default function CatalogView() {
       </aside>
 
       {/* ── Main — unified table ─────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50">
+      <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50 print:overflow-visible print:bg-white">
         {selected.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full select-none">
             <svg className="mb-4 h-12 w-12 text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
@@ -465,7 +465,7 @@ export default function CatalogView() {
         ) : (
           <>
             {/* ── Controls bar ──────────────────────────────────────────────── */}
-            <div className="shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-2">
+            <div className="print:hidden shrink-0 border-b border-zinc-200 bg-white px-6 py-2.5 flex items-center gap-2">
 
               {/* View mode toggle */}
               <div className="flex items-center rounded-lg bg-zinc-100 p-0.5 gap-0.5">
@@ -520,10 +520,21 @@ export default function CatalogView() {
                 </button>
               </div>
 
+              {/* Imprimir */}
+              <button
+                onClick={() => window.print()}
+                className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 9V4a1 1 0 011-1h10a1 1 0 011 1v5M6 18H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-1M6 14h12v7H6v-7z" />
+                </svg>
+                Imprimir
+              </button>
+
               {/* Limpar */}
               <button
                 onClick={() => { setSelected([]); setPivots(new Map()); }}
-                className="ml-auto flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -532,9 +543,9 @@ export default function CatalogView() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-6">
-            <div className="w-fit mx-auto rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-              <table className="border-collapse text-sm">
+            <div className="flex-1 overflow-auto p-6 print:overflow-visible print:h-auto print:p-0">
+            <div className="w-fit mx-auto rounded-xl border border-zinc-200 bg-white shadow-sm overflow-hidden print:w-full print:rounded-none print:border-0 print:shadow-none">
+              <table className="border-collapse text-sm w-full">
                 <thead>
                   <tr className="border-b-2 border-zinc-200 bg-zinc-50">
                     <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 whitespace-nowrap border-r border-zinc-200">
@@ -576,7 +587,7 @@ export default function CatalogView() {
                                     {state === "loading" && <Spinner className="h-3.5 w-3.5 text-zinc-400" />}
                                   </div>
                                   <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
-                                    className="flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                    className="print:hidden flex-none rounded-md p-1 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -644,7 +655,7 @@ export default function CatalogView() {
                                 <td className="px-3 py-2.5 text-sm text-zinc-700 whitespace-nowrap border-r border-zinc-100">
                                   <div className="flex items-center gap-2">
                                     <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
-                                      className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                      className="print:hidden shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                                       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                       </svg>
@@ -665,7 +676,7 @@ export default function CatalogView() {
                                   <div className="flex items-center gap-2">
                                     {rowIdx === 0 && (
                                       <button onClick={() => toggleProduct(product)} aria-label="Remover produto"
-                                        className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                        className="print:hidden shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                         </svg>

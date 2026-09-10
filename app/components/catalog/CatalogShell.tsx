@@ -5,8 +5,11 @@ import SyncLastTime from "./SyncLastTime";
 
 export default function CatalogShell() {
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-zinc-50">
-      <header className="shrink-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur px-6 py-3.5">
+    <div className="h-screen flex flex-col overflow-hidden bg-zinc-50 print:h-auto print:overflow-visible print:bg-white">
+      <p className="hidden print:block px-1 pb-3 text-lg font-bold text-zinc-900">
+        Grido — Estoque
+      </p>
+      <header className="print:hidden shrink-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur px-6 py-3.5">
         <div className="flex items-center justify-between gap-8">
           <div className="flex items-center gap-5 min-w-0">
             <span className="text-base font-bold tracking-tight text-zinc-900 shrink-0">Grido</span>
